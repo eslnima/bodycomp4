@@ -1,0 +1,3773 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Composition Report — BIA Client Scoring Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --ink:#0F2438;
+    --ink-soft:#3E5266;
+    --paper:#F3F5F4;
+    --panel:#FFFFFF;
+    --line:#DCE2E4;
+    --teal:#127A6E;
+    --teal-deep:#0B5A51;
+    --teal-pale:#DCEFEC;
+    --amber:#C9622A;
+    --amber-pale:#F7E4D6;
+    --red:#B33A3A;
+    --red-pale:#F3DADA;
+    --blue:#2B5FA3;
+    --blue-pale:#DCE6F3;
+    --grey-pale:#E8EAEA;
+    --mono: 'IBM Plex Mono', monospace;
+    --display: 'Space Grotesk', sans-serif;
+    --body: 'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--body);
+    -webkit-font-smoothing:antialiased;
+  }
+  html[lang="fa"] body{font-family:'Vazirmatn', var(--body);}
+  /* Letter-spacing breaks Persian/Arabic letter-joining (the script is
+     cursive — spacing forces every letter apart, which is exactly the
+     "disjointed characters" bug). This design uses letter-spacing
+     heavily for its mono/label aesthetic, so instead of chasing every
+     selector that might contain translated text, neutralize it
+     universally whenever the page is in Farsi. */
+  html[lang="fa"] *{
+    letter-spacing:normal !important;
+    font-family:'Vazirmatn', sans-serif;
+  }
+  a{color:var(--teal-deep);}
+  /* Vazirmatn reads visually lighter/smaller than the Latin fonts this
+     design was tuned for at the same pixel size, so nudge weight and
+     line-height up for body copy and long-form report text. */
+  html[lang="fa"] p, html[lang="fa"] .summary-card p, html[lang="fa"] .disclaimer,
+  html[lang="fa"] .nutri-rationale, html[lang="fa"] .nutri-caution, html[lang="fa"] .nutri-sources,
+  html[lang="fa"] .dc-tagline, html[lang="fa"] .dc-meal .mf, html[lang="fa"] .calib-hint,
+  html[lang="fa"] .field .hint, html[lang="fa"] .weights-note{
+    line-height:1.85; font-weight:500;
+  }
+  html[lang="fa"] .gauge-zone-label, html[lang="fa"] .zone-pill, html[lang="fa"] .sub-score,
+  html[lang="fa"] .dc-meal .mt, html[lang="fa"] .dc-macro-legend{
+    font-weight:600;
+  }
+  html[lang="fa"] .disclaimer, html[lang="fa"] .nutri-sources{
+    color:#5B6B75; /* darker than the default light grey for better export/print contrast */
+  }
+
+  /* ---------- Shell ---------- */
+  .shell{
+    max-width:1400px;
+    margin:0 auto;
+    padding:28px 28px 80px;
+  }
+  .topbar{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    border-bottom:2px solid var(--ink);
+    padding-bottom:14px;
+    margin-bottom:26px;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .brand{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+  }
+  .brand .mark{
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:.14em;
+    background:var(--ink);
+    color:var(--paper);
+    padding:4px 7px;
+    border-radius:3px;
+  }
+  .brand h1{
+    font-family:var(--display);
+    font-size:22px;
+    font-weight:700;
+    margin:0;
+    letter-spacing:-0.01em;
+  }
+  .brand .sub{
+    font-family:var(--mono);
+    font-size:11.5px;
+    color:var(--ink-soft);
+    letter-spacing:.04em;
+  }
+  .topbar-actions{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+
+  .lang-switch{display:flex; border:1.5px solid var(--ink); border-radius:3px; overflow:hidden;}
+  .lang-btn{
+    font-family:var(--mono); font-size:12px; letter-spacing:.03em;
+    border:none; background:var(--panel); color:var(--ink);
+    padding:8px 13px; cursor:pointer;
+  }
+  .lang-btn + .lang-btn{border-left:1.5px solid var(--ink);}
+  html[dir="rtl"] .lang-btn + .lang-btn{border-left:none; border-right:1.5px solid var(--ink);}
+  .lang-btn.active{background:var(--ink); color:var(--paper);}
+
+  .btn{
+    font-family:var(--mono);
+    font-size:12.5px;
+    letter-spacing:.03em;
+    border:1.5px solid var(--ink);
+    background:var(--panel);
+    color:var(--ink);
+    padding:9px 16px;
+    border-radius:3px;
+    cursor:pointer;
+    transition:all .15s ease;
+  }
+  .btn:hover{background:var(--ink); color:var(--paper);}
+  .btn.primary{
+    background:var(--teal);
+    border-color:var(--teal);
+    color:#fff;
+  }
+  .btn.primary:hover{background:var(--teal-deep); border-color:var(--teal-deep);}
+  .btn:disabled{opacity:.4; cursor:not-allowed;}
+
+  /* ---------- Layout ---------- */
+  .grid{
+    display:grid;
+    grid-template-columns: 320px 1fr;
+    gap:24px;
+    align-items:start;
+  }
+  @media (max-width: 980px){
+    .grid{grid-template-columns:1fr;}
+  }
+
+  /* ---------- Form panel ---------- */
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:6px;
+  }
+  .form-panel{
+    position:sticky;
+    top:20px;
+    padding:20px 20px 22px;
+  }
+  .panel-title{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--teal-deep);
+    margin:0 0 14px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .panel-title::after{
+    content:"";
+    flex:1;
+    height:1px;
+    background:var(--line);
+  }
+  .field{margin-bottom:13px;}
+  .field label{
+    display:block;
+    font-size:11.5px;
+    font-weight:600;
+    color:var(--ink-soft);
+    margin-bottom:4px;
+    letter-spacing:.01em;
+  }
+  .field .hint{font-weight:400; color:#8A98A3; font-size:10.5px;}
+  .field input, .field select{
+    width:100%;
+    padding:8px 9px;
+    border:1.3px solid var(--line);
+    border-radius:4px;
+    font-size:13.5px;
+    font-family:inherit;
+    background:#FBFCFC;
+    color:var(--ink);
+  }
+  .field input:focus, .field select:focus{
+    outline:none;
+    border-color:var(--teal);
+    background:#fff;
+  }
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;}
+  .divider-label{
+    font-family:var(--mono);
+    font-size:10px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:#9AA7B0;
+    margin:18px 0 10px;
+  }
+  .form-actions{margin-top:16px; display:flex; flex-direction:column; gap:8px;}
+  .field-warning{
+    font-family:var(--mono); font-size:10.5px; line-height:1.55;
+    padding:8px 10px; border-radius:5px; margin:2px 0 12px;
+    background:var(--amber-pale); border:1px solid #C9622A; color:#9C4A1F;
+  }
+  .toggle-field{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:7px 0;
+  }
+  .toggle-field .toggle-label{font-size:12.5px; color:var(--ink); font-weight:500;}
+  .radio-pair{display:flex; gap:12px; font-family:var(--mono); font-size:11px; color:var(--ink-soft); flex-shrink:0;}
+  .radio-pair label{display:flex; align-items:center; gap:4px; cursor:pointer;}
+  .radio-pair input[type="radio"]{accent-color:var(--teal); cursor:pointer; margin:0;}
+  html[dir="rtl"] .toggle-field, html[dir="rtl"] .radio-pair{direction:rtl;}
+  .avoid-pills{display:flex; flex-wrap:wrap; gap:7px; margin-top:2px;}
+  .avoid-pill{
+    display:flex; align-items:center; gap:5px;
+    font-family:var(--mono); font-size:10.5px; color:var(--ink-soft);
+    border:1px solid var(--line); border-radius:14px; padding:5px 11px;
+    cursor:pointer; user-select:none; background:#FBFCFC;
+  }
+  .avoid-pill input{accent-color:var(--teal); cursor:pointer; margin:0;}
+  .avoid-pill.checked{border-color:var(--teal); background:var(--teal-pale); color:var(--teal-deep);}
+  .form-actions .btn{width:100%; text-align:center;}
+  .err{
+    display:none;
+    background:var(--red-pale);
+    color:var(--red);
+    border:1px solid #E2B6B6;
+    font-size:11.5px;
+    padding:8px 10px;
+    border-radius:4px;
+    margin-top:10px;
+    font-family:var(--mono);
+  }
+
+  /* ---------- History / saved reports ---------- */
+  .history-divider{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .clear-history-btn{
+    font-family:var(--mono); font-size:9.5px; color:var(--red);
+    background:none; border:none; cursor:pointer; padding:0; text-decoration:underline;
+    text-transform:none; letter-spacing:0;
+  }
+  .clear-history-btn:hover{color:#8F2E2E;}
+  .history-empty{
+    font-family:var(--mono); font-size:10.5px; color:#9AA7B0;
+    border:1.5px dashed var(--line); border-radius:4px; padding:10px; text-align:center; line-height:1.5;
+  }
+  .history-list{display:flex; flex-direction:column; gap:6px; max-height:260px; overflow-y:auto; margin-bottom:8px;}
+  .history-item{
+    display:flex; align-items:center; gap:8px;
+    padding:7px 8px; border:1px solid var(--line); border-radius:4px; background:#FBFCFC;
+  }
+  .history-item .hi-main{flex:1; min-width:0;}
+  .history-item .hi-name{font-size:11.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .history-item .hi-meta{font-family:var(--mono); font-size:9px; color:var(--ink-soft); margin-top:1px;}
+  .history-item .hi-score{
+    font-family:var(--mono); font-weight:700; font-size:11px; color:var(--teal-deep);
+    background:var(--teal-pale); border-radius:9px; padding:2px 7px; flex-shrink:0;
+  }
+  .history-item .hi-actions{display:flex; gap:4px; flex-shrink:0;}
+  .history-item .hi-actions button{
+    font-family:var(--mono); font-size:9.5px; border:1px solid var(--line); background:#fff;
+    border-radius:3px; padding:4px 7px; cursor:pointer; color:var(--ink);
+  }
+  .history-item .hi-actions button:hover{background:var(--teal-pale); border-color:var(--teal);}
+  .history-item .hi-actions button.hi-del:hover{background:var(--red-pale); border-color:var(--red); color:var(--red);}
+
+  .backup-actions{display:flex; gap:8px; margin:0 0 10px;}
+  .btn-backup{
+    flex:1;
+    font-family:var(--mono); font-size:10.5px; letter-spacing:.02em;
+    border:1px solid var(--line); background:#fff; color:var(--ink);
+    padding:7px 6px; border-radius:4px; cursor:pointer; text-align:center;
+  }
+  .btn-backup:hover{background:var(--teal-pale); border-color:var(--teal);}
+
+  /* ---------- Report ---------- */
+  #report-empty{
+    padding:80px 30px;
+    text-align:center;
+    color:#8A98A3;
+    font-family:var(--mono);
+    font-size:13px;
+    border:1.5px dashed var(--line);
+    border-radius:6px;
+  }
+  #report{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:30px 34px 26px;
+    display:none;
+  }
+  .report-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    border-bottom:2px solid var(--ink);
+    padding-bottom:16px;
+    margin-bottom:20px;
+    gap:20px;
+  }
+  .report-head .client-block .eyebrow{
+    font-family:var(--mono);
+    font-size:10.5px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--teal-deep);
+    margin-bottom:6px;
+  }
+  .report-head .client-block h2{
+    font-family:var(--display);
+    font-size:24px;
+    margin:0 0 4px;
+  }
+  .report-head .client-meta{
+    font-family:var(--mono);
+    font-size:11.5px;
+    color:var(--ink-soft);
+    display:flex; gap:14px; flex-wrap:wrap;
+  }
+  .score-block{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    flex-shrink:0;
+  }
+  .score-ring-wrap{position:relative; width:96px; height:96px; flex-shrink:0;}
+  .score-ring-wrap svg{display:block;}
+  .score-num{
+    position:absolute; top:0; left:0; right:0; bottom:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    line-height:1;
+  }
+  .score-num .n{font-family:var(--display); font-size:26px; font-weight:700; line-height:1;}
+  .score-num .d{font-family:var(--mono); font-size:9px; color:var(--ink-soft); margin-top:2px; line-height:1;}
+  .score-label-block .grade{
+    font-family:var(--display);
+    font-weight:700;
+    font-size:15px;
+  }
+  .score-label-block .grade-sub{
+    font-family:var(--mono);
+    font-size:10.5px;
+    color:var(--ink-soft);
+    max-width:170px;
+    line-height:1.4;
+  }
+
+  .section-title{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--teal-deep);
+    margin:22px 0 12px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .section-title::after{content:""; flex:1; height:1px; background:var(--line);}
+
+  /* Collapsible report sections — everything starts closed except Diet
+     Plans; the section title itself is the toggle. */
+  .section-title.collapsible{cursor:pointer; user-select:none;}
+  .section-title.collapsible:hover{color:var(--teal);}
+  .section-title-text{white-space:nowrap;}
+  .section-chevron{
+    font-size:10px; color:var(--ink-soft); transition:transform .15s ease;
+    flex-shrink:0;
+  }
+  .report-section .section-body{display:none;}
+  .report-section.open .section-body{display:block;}
+  .report-section.open .section-chevron{transform:rotate(90deg);}
+  html[dir="rtl"] .report-section.open .section-chevron{transform:rotate(-90deg);}
+
+  /* Gauges */
+  .gauges{display:grid; grid-template-columns:1fr 1fr; gap:16px 22px;}
+  .gauge{border:1px solid var(--line); border-radius:5px; padding:12px 14px 14px;}
+  .gauge-top{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; gap:8px;}
+  .gauge-top .name{font-weight:600; font-size:13px;}
+  .gauge-top .value{font-family:var(--mono); font-size:15px; font-weight:600; white-space:nowrap;}
+  .gauge-zone-label{font-family:var(--mono); font-size:10px; color:var(--ink-soft); margin-bottom:6px;}
+  .gauge-track{
+    position:relative;
+    height:14px;
+    border-radius:3px;
+    overflow:visible;
+    display:flex;
+    direction:ltr;
+    border:1px solid var(--line);
+  }
+  .gauge-seg{height:100%;}
+  .gauge-marker{
+    position:absolute;
+    top:-6px;
+    width:0; height:0;
+    border-left:6px solid transparent;
+    border-right:6px solid transparent;
+    border-top:8px solid var(--ink);
+    transform:translateX(-50%);
+  }
+  .gauge-marker-line{
+    position:absolute;
+    top:-6px; bottom:-6px;
+    width:2px;
+    background:var(--ink);
+    transform:translateX(-50%);
+  }
+  .gauge-range-labels{
+    display:flex; justify-content:space-between; direction:ltr;
+    font-family:var(--mono); font-size:9.5px; color:#9AA7B0; margin-top:5px;
+  }
+  .gauge-footer{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-top:8px; gap:8px;
+  }
+  .zone-pill{
+    font-family:var(--mono); font-size:10px; padding:2px 8px; border-radius:10px;
+    display:inline-block; white-space:nowrap;
+  }
+  .sub-score{font-family:var(--mono); font-size:11px; color:var(--ink-soft); white-space:nowrap;}
+  .gauge-calc{
+    font-family:var(--mono); font-size:10.5px; color:var(--ink-soft);
+    margin-top:10px; padding-top:10px; border-top:1px dashed var(--line);
+  }
+  .gauge-calc b{color:var(--ink); font-weight:600;}
+  .gauge-caveat{
+    font-size:10.5px; line-height:1.55; color:var(--ink-soft);
+    margin-top:7px;
+  }
+  .ref-detail-hint{
+    font-family:var(--mono); font-size:10px; color:var(--ink-soft); line-height:1.5; margin-bottom:12px;
+  }
+  .ref-detail-item{
+    border:1px solid var(--line); border-radius:5px; padding:12px 14px; margin-bottom:10px;
+  }
+  .ref-detail-item:last-child{margin-bottom:0;}
+  .ref-detail-item .rd-title{font-weight:600; font-size:12.5px; margin-bottom:6px;}
+  .ref-detail-item .gauge-calc{margin-top:0; padding-top:0; border-top:none;}
+  .ref-detail-item .gauge-caveat{margin-top:6px;}
+
+  /* chart + summary layout */
+  .analysis-grid{display:grid; grid-template-columns:1.15fr 1fr; gap:22px; align-items:start;}
+  @media (max-width:760px){.analysis-grid{grid-template-columns:1fr;}}
+
+  .nutri-goal-banner{
+    background:var(--teal-pale); color:var(--teal-deep);
+    border-radius:5px; padding:10px 14px;
+    font-family:var(--mono); font-size:12px; font-weight:600;
+    margin-bottom:14px;
+  }
+  .nutri-grid{
+    display:grid; grid-template-columns:repeat(5, 1fr); gap:12px;
+  }
+  @media (max-width:900px){.nutri-grid{grid-template-columns:repeat(2,1fr);}}
+  .nutri-card{
+    border:1px solid var(--line); border-radius:5px; padding:11px 12px;
+    background:#FBFCFC;
+  }
+  .nutri-card .nc-label{
+    font-family:var(--mono); font-size:9.5px; letter-spacing:.05em; text-transform:uppercase;
+    color:var(--ink-soft); margin-bottom:6px;
+  }
+  .nutri-card .nc-value{
+    font-family:var(--display); font-weight:700; font-size:19px; color:var(--ink); line-height:1.15;
+  }
+  .nutri-card .nc-sub{
+    font-family:var(--mono); font-size:10px; color:#8A98A3; margin-top:3px;
+  }
+  .nutri-rationale{
+    margin-top:14px; font-size:12.6px; line-height:1.65; color:var(--ink);
+    border-left:3px solid var(--teal); padding:2px 0 2px 12px;
+  }
+  html[dir="rtl"] .nutri-rationale{border-left:none; border-right:3px solid var(--teal); padding:2px 12px 2px 0;}
+  .nutri-caution{
+    margin-top:14px; font-size:12.6px; line-height:1.65; color:var(--red);
+    background:var(--red-pale); border-radius:5px; padding:10px 12px;
+  }
+  .nutri-sources{
+    margin-top:10px; font-family:var(--mono); font-size:9.5px; color:#9AA7B0; line-height:1.7;
+  }
+
+  /* ---------- Progress trend ---------- */
+  .trend-meta{
+    font-family:var(--mono); font-size:11px; color:var(--ink-soft); margin-bottom:12px;
+  }
+  .trend-cards{display:grid; grid-template-columns:repeat(5, 1fr); gap:12px; margin-bottom:16px;}
+  @media (max-width:900px){.trend-cards{grid-template-columns:repeat(2,1fr);}}
+  .trend-card{
+    border:1px solid var(--line); border-radius:5px; padding:11px 12px;
+    background:#FBFCFC;
+  }
+  .trend-card .tc-label{
+    font-family:var(--mono); font-size:9.5px; letter-spacing:.05em; text-transform:uppercase;
+    color:var(--ink-soft); margin-bottom:6px;
+  }
+  .trend-card .tc-value{
+    font-family:var(--display); font-weight:700; font-size:19px; color:var(--ink); line-height:1.15;
+  }
+  .trend-card .tc-delta{
+    font-family:var(--mono); font-size:11px; margin-top:6px; font-weight:600;
+  }
+  .trend-card .tc-delta.up{color:#127A6E;}
+  .trend-card .tc-delta.down{color:var(--red);}
+  .trend-card .tc-delta.neutral{color:var(--ink-soft);}
+  .trend-card .tc-delta-label{font-weight:400; color:#9AA7B0; margin-left:3px;}
+  html[dir="rtl"] .trend-card .tc-delta-label{margin-left:0; margin-right:3px;}
+  .trend-card .tc-delta-sub{
+    font-family:var(--mono); font-size:9.5px; color:#9AA7B0; margin-top:3px;
+  }
+  .tc-tag{
+    display:inline-block; margin-top:6px;
+    font-family:var(--mono); font-size:9.5px; font-weight:600; letter-spacing:.01em;
+    padding:2px 8px; border-radius:9px;
+  }
+  .tc-tag.teal{background:var(--teal-pale); color:var(--teal-deep);}
+  .tc-tag.amber{background:var(--amber-pale); color:#9C4A1F;}
+  .tc-tag.red{background:var(--red-pale); color:#8F2E2E;}
+  .build-row{display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; margin-bottom:16px;}
+  .build-row .scatter-card{flex:1 1 480px; min-width:280px; margin-bottom:0;}
+  .build-row .trend-mini-card{flex:0 0 260px; max-width:280px; margin-bottom:0;}
+  @media (max-width:820px){ .build-row .trend-mini-card{flex:1 1 100%; max-width:none;} }
+  .trend-chart-hint{
+    font-family:var(--mono); font-size:9px; line-height:1.5; color:#9AA7B0; margin-top:8px;
+  }
+  .trend-chart-title{
+    font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink-soft); margin-bottom:6px;
+  }
+  .trend-empty-note{
+    font-family:var(--mono); font-size:11px; color:#9AA7B0;
+    border:1.5px dashed var(--line); border-radius:5px; padding:10px 12px; margin-bottom:4px;
+  }
+
+  /* ---------- Database overview (empty state) ---------- */
+  #dbOverviewPanel{
+    border:1px solid var(--line); border-radius:6px; background:var(--panel);
+    padding:18px 20px 20px; margin-top:16px;
+  }
+  #dbOverviewPanel .section-title{margin-top:0;}
+  .db-overview-meta{font-family:var(--mono); font-size:11px; color:var(--ink-soft); margin-bottom:12px;}
+  .db-overview-actions{margin-top:14px;}
+
+  /* ---------- Diet plan cards ---------- */
+  .diet-plans-sub{
+    font-size:12px; color:var(--ink-soft); margin:-6px 0 14px; line-height:1.5; max-width:640px;
+  }
+  .diet-plans{display:grid; grid-template-columns:repeat(3,1fr); gap:16px;}
+  @media (max-width:820px){.diet-plans{grid-template-columns:1fr;}}
+  .diet-card{
+    position:relative;
+    border:1.5px solid var(--line); border-radius:8px;
+    padding:18px 16px 15px; background:#FBFCFC;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .diet-card.recommended{border-color:var(--teal); box-shadow:0 0 0 1px var(--teal) inset;}
+  .diet-card .dc-badge{
+    position:absolute; top:-11px; right:14px;
+    background:var(--teal); color:#fff;
+    font-family:var(--mono); font-size:9px; letter-spacing:.04em;
+    padding:4px 10px; border-radius:10px; white-space:nowrap;
+  }
+  html[dir="rtl"] .diet-card .dc-badge{right:auto; left:14px;}
+  .dc-head{display:flex; align-items:center; gap:10px;}
+  .dc-icon{
+    font-size:26px; line-height:1; width:44px; height:44px;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--teal-pale); border-radius:50%; flex-shrink:0;
+  }
+  .dc-headtext .dc-title{font-family:var(--display); font-weight:700; font-size:16px; color:var(--ink);}
+  .dc-headtext .dc-tagline{font-size:11px; color:var(--ink-soft); line-height:1.4; margin-top:2px;}
+  .dc-cal{display:flex; align-items:baseline; gap:6px;}
+  .dc-cal .n{font-family:var(--display); font-weight:700; font-size:23px; color:var(--teal-deep); line-height:1;}
+  .dc-cal .u{font-family:var(--mono); font-size:10px; color:var(--ink-soft);}
+  .dc-donut-row{display:flex; align-items:center; gap:14px;}
+  .dc-donut-row canvas{flex-shrink:0; display:block;}
+  .dc-macro-legend{display:flex; flex-direction:column; gap:5px; font-family:var(--mono); font-size:10.5px;}
+  .dc-macro-legend .row{display:flex; align-items:center; gap:6px; white-space:nowrap;}
+  .dc-macro-legend .sw{width:8px; height:8px; border-radius:2px; flex-shrink:0;}
+  .dc-meals{border-top:1px dashed var(--line); margin-top:2px; padding-top:11px; display:flex; flex-direction:column; gap:8px;}
+  .dc-shuffle{
+    width:100%; margin-top:10px; padding:7px 8px; border-radius:5px;
+    border:1px solid var(--line); background:#fff; color:var(--ink-soft);
+    font-family:var(--mono); font-size:10.5px; cursor:pointer;
+  }
+  .dc-shuffle:hover{background:var(--teal-pale); border-color:var(--teal); color:var(--teal-deep);}
+  .dc-meal{display:flex; gap:9px; align-items:flex-start; font-size:11.5px; line-height:1.4;}
+  .dc-meal .mi{font-size:16px; line-height:1.3; flex-shrink:0;}
+  .dc-meal .mt{font-weight:600; color:var(--ink); display:block; font-size:11px;}
+  .dc-meal .mf{color:var(--ink-soft); font-size:11px;}
+  html[lang="fa"] .diet-plans-sub, html[lang="fa"] .dc-headtext .dc-tagline,
+  html[lang="fa"] .dc-cal .n, html[lang="fa"] .dc-cal .u,
+  html[lang="fa"] .dc-macro-legend, html[lang="fa"] .dc-meal .mt, html[lang="fa"] .dc-meal .mf,
+  html[lang="fa"] .dc-badge{
+    unicode-bidi: plaintext;
+  }
+
+  .chart-card{border:1px solid var(--line); border-radius:5px; padding:14px 16px 10px;}
+  .chart-card canvas{max-width:100%; height:auto; display:block;}
+  .chart-legend{display:flex; flex-wrap:wrap; gap:10px 14px; margin-top:8px; font-family:var(--mono); font-size:9.5px; color:var(--ink-soft);}
+  .chart-legend span.sw{display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px; vertical-align:middle;}
+  html[dir="rtl"] .chart-legend span.sw{margin-right:0; margin-left:5px;}
+
+  /* Mixed Persian + Latin-number/percent runs render with odd spacing under
+     the default bidi algorithm; plaintext bidi resolves each line by its
+     own content instead of forcing the paragraph's base direction. */
+  html[lang="fa"] .gauge-zone-label,
+  html[lang="fa"] .gauge-top .value,
+  html[lang="fa"] .weights-note,
+  html[lang="fa"] .disclaimer,
+  html[lang="fa"] .target-line,
+  html[lang="fa"] .summary-card p,
+  html[lang="fa"] .client-meta span,
+  html[lang="fa"] .sub-score,
+  html[lang="fa"] .score-num .d,
+  html[lang="fa"] .nutri-goal-banner,
+  html[lang="fa"] .nutri-card .nc-value,
+  html[lang="fa"] .nutri-card .nc-sub,
+  html[lang="fa"] .nutri-rationale,
+  html[lang="fa"] .nutri-caution,
+  html[lang="fa"] .nutri-sources,
+  html[lang="fa"] .field-warning,
+  html[lang="fa"] .gauge-calc,
+  html[lang="fa"] .gauge-caveat{
+    unicode-bidi: plaintext;
+  }
+
+  .summary-card{border:1px solid var(--line); border-radius:5px; padding:16px 18px;}
+  .summary-card p{margin:0 0 10px; font-size:12.8px; line-height:1.8; color:var(--ink);}
+  .summary-card p:last-child{margin-bottom:0;}
+  .summary-card b{color:var(--teal-deep);}
+  .target-line{
+    font-family:var(--mono); font-size:11px; background:var(--teal-pale); color:var(--teal-deep);
+    padding:8px 10px; border-radius:4px; margin-top:10px; line-height:1.6;
+  }
+
+  .weights-note{
+    font-family:var(--mono); font-size:10px; color:#9AA7B0; margin-top:14px; line-height:1.6;
+  }
+  .disclaimer{
+    margin-top:22px; padding-top:14px; border-top:1px solid var(--line);
+    font-family:var(--mono); font-size:9.5px; color:#9AA7B0; line-height:1.7;
+  }
+
+  @media print{
+    .form-panel, .topbar-actions, body > .shell > .topbar{display:none;}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <div class="topbar">
+    <div class="brand">
+      <span class="mark">BIA/01</span>
+      <div>
+        <h1 data-i18n="appTitle">Composition Report</h1>
+        <div class="sub" data-i18n="appSub">client scoring &amp; range assessment tool</div>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="lang-switch">
+        <button class="lang-btn active" data-lang="en">EN</button>
+        <button class="lang-btn" data-lang="fa">فا</button>
+      </div>
+      <button class="btn" id="shareBtn" data-i18n="shareBtn" disabled>Share ↗</button>
+      <button class="btn" id="imageBtn" data-i18n="imageBtn" disabled>Image ↓</button>
+      <button class="btn" id="htmlExportBtn" data-i18n="htmlExportBtn" disabled>Interactive HTML ↓</button>
+      <button class="btn primary" id="exportBtn" data-i18n="exportBtn" disabled>Export PDF ↓</button>
+    </div>
+  </div>
+
+  <div class="grid">
+
+    <!-- ===================== FORM ===================== -->
+    <div class="panel form-panel">
+      <div class="panel-title" data-i18n="panelTitle">Client Measurements</div>
+
+      <div class="field">
+        <label><span data-i18n="labelClientName">Client name</span> <span class="hint" data-i18n="hintOptional">(optional)</span></label>
+        <input type="text" id="clientName" enterkeyhint="next" data-i18n-placeholder="phClientName" placeholder="e.g. Alex Rivera">
+      </div>
+
+      <div class="field">
+        <label data-i18n="labelSex">Sex</label>
+        <select id="sex" enterkeyhint="next">
+          <option value="female" data-i18n="optFemale">Female</option>
+          <option value="male" data-i18n="optMale">Male</option>
+        </select>
+      </div>
+      <div class="field">
+        <label><span data-i18n="labelHeight">Height</span> <span class="hint" data-i18n="hintCm">(cm)</span></label>
+        <input type="number" id="height" inputmode="numeric" enterkeyhint="next" placeholder="170" min="120" max="230">
+      </div>
+      <div class="field">
+        <label><span data-i18n="labelAge">Age</span> <span class="hint" data-i18n="hintYrs">(yrs)</span></label>
+        <input type="number" id="age" inputmode="numeric" enterkeyhint="next" placeholder="34" min="15" max="100">
+      </div>
+
+      <div class="divider-label" data-i18n="dividerBIA">— BIA Reading —</div>
+
+      <div class="field">
+        <label><span data-i18n="labelWeight">Weight</span> <span class="hint" data-i18n="hintKg">(kg)</span></label>
+        <input type="number" id="weight" inputmode="decimal" enterkeyhint="next" placeholder="68" min="30" max="250" step="0.1">
+      </div>
+      <div class="field">
+        <label><span data-i18n="labelFat">Body fat</span> <span class="hint" data-i18n="hintPct">(%)</span></label>
+        <input type="number" id="fat" inputmode="decimal" enterkeyhint="next" placeholder="24.5" min="1" max="70" step="0.1">
+      </div>
+      <div class="field">
+        <label><span data-i18n="labelWater">Total body water</span> <span class="hint" data-i18n="hintPct">(%)</span></label>
+        <input type="number" id="water" inputmode="decimal" enterkeyhint="next" placeholder="52.0" min="20" max="80" step="0.1">
+      </div>
+      <div class="field">
+        <label><span data-i18n="labelMuscle">Skeletal muscle</span> <span class="hint" data-i18n="hintPct">(%)</span></label>
+        <input type="number" id="muscle" inputmode="decimal" enterkeyhint="next" placeholder="30.5" min="10" max="60" step="0.1">
+      </div>
+      <div class="field">
+        <label><span data-i18n="labelBone">Bone mass</span> <span class="hint" data-i18n="hintBone">(kg, optional)</span></label>
+        <input type="number" id="bone" inputmode="decimal" enterkeyhint="done" placeholder="2.4" min="0.5" max="6" step="0.01">
+      </div>
+      <div class="field-warning" id="sanityWarning" style="display:none;"></div>
+
+      <div class="divider-label" data-i18n="dividerGoals">— Activity &amp; Goals —</div>
+      <div class="field">
+        <label><span data-i18n="labelActivity">Activity level</span> <span class="hint" data-i18n="hintActivity">(for calorie targets)</span></label>
+        <select id="activity">
+          <option value="sedentary" data-i18n="actSedentary">Sedentary — desk job, little exercise</option>
+          <option value="light" data-i18n="actLight">Light — exercise 1–3x/week</option>
+          <option value="moderate" selected data-i18n="actModerate">Moderate — exercise 3–5x/week</option>
+          <option value="active" data-i18n="actActive">Active — exercise 6–7x/week</option>
+          <option value="veryActive" data-i18n="actVeryActive">Very active — hard daily training</option>
+        </select>
+      </div>
+
+      <div id="dietPrefsSection" style="display:none;">
+        <div class="divider-label" data-i18n="dividerDietPrefs">— Diet Preferences (optional) —</div>
+        <div class="field">
+          <label><span data-i18n="labelDietPattern">Eating pattern</span></label>
+          <select id="dietPattern">
+            <option value="omnivore" selected data-i18n="dpOmnivore">No restriction</option>
+            <option value="pescatarian" data-i18n="dpPescatarian">Pescatarian</option>
+            <option value="vegetarian" data-i18n="dpVegetarian">Vegetarian</option>
+            <option value="vegan" data-i18n="dpVegan">Vegan</option>
+          </select>
+        </div>
+        <div class="field">
+          <label><span data-i18n="labelCuisine">Cuisine style</span></label>
+          <select id="cuisine">
+            <option value="any" selected data-i18n="cuisineAny">No preference</option>
+            <option value="mediterranean" data-i18n="cuisineMediterranean">Mediterranean</option>
+            <option value="middleEastern" data-i18n="cuisineMiddleEastern">Middle Eastern</option>
+            <option value="asian" data-i18n="cuisineAsian">Asian</option>
+            <option value="latinAmerican" data-i18n="cuisineLatinAmerican">Latin American</option>
+            <option value="american" data-i18n="cuisineAmerican">American</option>
+          </select>
+        </div>
+        <div class="field">
+          <label data-i18n="labelAvoid">Avoid</label>
+          <div class="avoid-pills" id="avoidPills">
+            <label class="avoid-pill"><input type="checkbox" value="dairy"><span data-i18n="avoidDairy">Dairy</span></label>
+            <label class="avoid-pill"><input type="checkbox" value="gluten"><span data-i18n="avoidGluten">Gluten</span></label>
+            <label class="avoid-pill"><input type="checkbox" value="nuts"><span data-i18n="avoidNuts">Nuts</span></label>
+            <label class="avoid-pill"><input type="checkbox" value="shellfish"><span data-i18n="avoidShellfish">Shellfish</span></label>
+            <label class="avoid-pill"><input type="checkbox" value="pork"><span data-i18n="avoidPork">Pork</span></label>
+            <label class="avoid-pill"><input type="checkbox" value="redMeat"><span data-i18n="avoidRedMeat">Red meat</span></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider-label" data-i18n="dividerSections">— Report Sections —</div>
+      <div class="toggle-field">
+        <span class="toggle-label" data-i18n="toggleTrend">Progress Trend</span>
+        <div class="radio-pair">
+          <label><input type="radio" name="toggle-trend" value="on"> <span data-i18n="toggleOn">On</span></label>
+          <label><input type="radio" name="toggle-trend" value="off" checked> <span data-i18n="toggleOff">Off</span></label>
+        </div>
+      </div>
+      <div class="toggle-field">
+        <span class="toggle-label" data-i18n="toggleChart">Score Trends Diagram</span>
+        <div class="radio-pair">
+          <label><input type="radio" name="toggle-chart" value="on"> <span data-i18n="toggleOn">On</span></label>
+          <label><input type="radio" name="toggle-chart" value="off" checked> <span data-i18n="toggleOff">Off</span></label>
+        </div>
+      </div>
+      <div class="toggle-field">
+        <span class="toggle-label" data-i18n="toggleDbCompare">Compared to Database</span>
+        <div class="radio-pair">
+          <label><input type="radio" name="toggle-dbcompare" value="on"> <span data-i18n="toggleOn">On</span></label>
+          <label><input type="radio" name="toggle-dbcompare" value="off" checked> <span data-i18n="toggleOff">Off</span></label>
+        </div>
+      </div>
+      <div class="toggle-field">
+        <span class="toggle-label" data-i18n="toggleDiet">Diet Plans</span>
+        <div class="radio-pair">
+          <label><input type="radio" name="toggle-diet" value="on" checked> <span data-i18n="toggleOn">On</span></label>
+          <label><input type="radio" name="toggle-diet" value="off"> <span data-i18n="toggleOff">Off</span></label>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn primary" id="generateBtn" data-i18n="generateBtn">Generate Report</button>
+      </div>
+      <div class="err" id="errBox"></div>
+
+      <div class="divider-label" data-i18n="dividerNotes">— Notes —</div>
+      <div class="field">
+        <label><span data-i18n="labelNotes">Trainer notes</span> <span class="hint" data-i18n="hintNotes">(optional, appears on report)</span></label>
+        <input type="text" id="notes" data-i18n-placeholder="phNotes" placeholder="e.g. Post 8-week cut cycle">
+      </div>
+
+      <div class="divider-label history-divider">
+        <span data-i18n="dividerHistory">— Saved Reports —</span>
+        <button class="clear-history-btn" id="clearHistoryBtn" data-i18n="clearHistoryBtn" style="display:none;">Clear all</button>
+      </div>
+      <div class="backup-actions" id="backupActions" style="display:none;">
+        <button class="btn-backup" id="backupBtn" type="button" data-i18n="backupBtn">Back up ↓</button>
+        <button class="btn-backup" id="restoreBtn" type="button" data-i18n="restoreBtn">Restore ↑</button>
+        <input type="file" id="restoreFile" accept="application/json" style="display:none;">
+      </div>
+      <div id="historyList" class="history-list"></div>
+      <div id="historyEmpty" class="history-empty" data-i18n="historyEmpty">No saved reports yet — generating a report saves it here automatically.</div>
+      <div id="historyUnsupported" class="history-empty" data-i18n="historyUnsupported" style="display:none;">Saved report history is available when this tool is open inside Claude.</div>
+    </div>
+
+    <!-- ===================== REPORT ===================== -->
+    <div>
+      <div id="report-empty" data-i18n="emptyState">Enter client measurements and select "Generate Report" to build a scored composition report.</div>
+      <div id="dbOverviewPanel" style="display:none;">
+        <div class="section-title" data-i18n="sectionDbOverview">Database Overview</div>
+        <div class="db-overview-meta" id="dbOverviewMeta"></div>
+        <div class="trend-cards" id="dbOverviewStats"><!-- injected --></div>
+        <div class="db-overview-actions">
+          <button class="btn" type="button" id="dbAverageBtn" data-i18n="dbAverageBtn">Generate report from database averages</button>
+        </div>
+      </div>
+
+      <div id="report">
+        <div class="report-head">
+          <div class="client-block">
+            <div class="eyebrow" data-i18n="reportEyebrow">Body Composition Assessment</div>
+            <h2 id="rClientName">Client</h2>
+            <div class="client-meta">
+              <span id="rMeta1">—</span>
+              <span id="rMeta2">—</span>
+              <span id="rDate">—</span>
+            </div>
+          </div>
+          <div class="score-block">
+            <div class="score-ring-wrap">
+              <svg width="96" height="96" viewBox="0 0 96 96">
+                <g transform="rotate(-90 48 48)">
+                  <circle cx="48" cy="48" r="42" fill="none" stroke="#E8EAEA" stroke-width="9"/>
+                  <circle id="scoreArc" cx="48" cy="48" r="42" fill="none" stroke="#127A6E" stroke-width="9" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264"/>
+                </g>
+              </svg>
+              <div class="score-num">
+                <div class="n" id="scoreNum">—</div>
+                <div class="d" id="scoreOutOf">/ 100</div>
+              </div>
+            </div>
+            <div class="score-label-block">
+              <div class="grade" id="scoreGrade">—</div>
+              <div class="grade-sub" id="scoreGradeSub" data-i18n="scoreSubLabel">Composite of fat, muscle &amp; water sub-scores.</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="trendSection" class="report-section" style="display:none;">
+          <div class="section-title collapsible" data-i18n="sectionTrend"><span class="section-title-text">Progress Trend</span><span class="section-chevron">▸</span></div>
+          <div class="section-body">
+            <div class="trend-meta" id="trendMeta"></div>
+            <div class="trend-cards" id="trendCards"><!-- injected --></div>
+          </div>
+        </div>
+
+        <div id="dbCompareSection" class="report-section" style="display:none;">
+          <div class="section-title collapsible" data-i18n="sectionDbCompare"><span class="section-title-text">Compared to Database</span><span class="section-chevron">▸</span></div>
+          <div class="section-body">
+            <div class="trend-meta" id="dbCompareMeta"></div>
+            <div class="trend-cards" id="dbCompareCards"><!-- injected --></div>
+          </div>
+        </div>
+
+        <div class="report-section open">
+          <div class="section-title collapsible" data-i18n="sectionRangePosition"><span class="section-title-text">Range Position</span><span class="section-chevron">▸</span></div>
+          <div class="section-body">
+            <div class="gauges" id="gauges"><!-- injected --></div>
+            <div class="weights-note" id="weightsNote"></div>
+          </div>
+        </div>
+
+        <div class="report-section" id="referenceDetailsSection">
+          <div class="section-title collapsible" data-i18n="sectionReferenceDetails"><span class="section-title-text">Reference Details</span><span class="section-chevron">▸</span></div>
+          <div class="section-body">
+            <div class="ref-detail-hint" data-i18n="referenceDetailsHint">What each reading means, how it's calculated where applicable, and its main caveat.</div>
+            <div id="referenceDetailsBody"><!-- injected --></div>
+          </div>
+        </div>
+
+        <div class="report-section open">
+          <div class="section-title collapsible" data-i18n="sectionBuildClassification"><span class="section-title-text">Build Classification</span><span class="section-chevron">▸</span></div>
+          <div class="section-body">
+            <div class="build-row">
+              <div class="chart-card scatter-card">
+                <canvas id="scatter" width="600" height="440"></canvas>
+                <div class="chart-legend" id="chartLegend"></div>
+              </div>
+              <div class="chart-card trend-mini-card" id="trendMiniCard" style="display:none;">
+                <div class="trend-chart-title" data-i18n="trendChartTitle">Trends over time</div>
+                <canvas id="trendChart" width="260" height="170"></canvas>
+                <div class="chart-legend" id="trendChartLegend"></div>
+                <div class="trend-chart-hint" data-i18n="trendChartHint">Each line is scaled to its own typical change, so normal shifts look similarly sized.</div>
+              </div>
+            </div>
+            <div class="summary-card">
+              <p id="summaryText">—</p>
+              <div class="target-line" id="targetLine"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="report-section open">
+          <div class="section-title collapsible" data-i18n="sectionNutrition"><span class="section-title-text">Nutrition &amp; Target Recommendations</span><span class="section-chevron">▸</span></div>
+          <div class="section-body">
+            <div class="nutri-goal-banner" id="nutriGoalBanner"></div>
+            <div class="nutri-grid" id="nutriGrid"><!-- injected --></div>
+            <div class="nutri-rationale" id="nutriRationale"></div>
+            <div class="nutri-sources" id="nutriSources"></div>
+          </div>
+        </div>
+
+        <div id="dietPlansSection" class="report-section open">
+          <div class="section-title collapsible" data-i18n="sectionDietPlans"><span class="section-title-text">Sample Diet Plans</span><span class="section-chevron">▸</span></div>
+          <div class="section-body">
+            <div class="diet-plans-sub" id="dietPlansSub"></div>
+            <div class="diet-plans" id="dietPlans"><!-- injected --></div>
+          </div>
+        </div>
+
+        <div class="disclaimer" id="disclaimerText"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   REFERENCE RANGE DATA
+   ============================================================ */
+const FAT_RANGES = {
+  male: {
+    '20-29': {essential:[2,5],  athletic:[6,13],  acceptable:[14,24], obeseMin:25},
+    '30-39': {essential:[2,5],  athletic:[6,14],  acceptable:[15,25], obeseMin:26},
+    '40-49': {essential:[3,6],  athletic:[7,15],  acceptable:[16,26], obeseMin:27},
+    '50-59': {essential:[3,7],  athletic:[8,16],  acceptable:[17,27], obeseMin:28},
+    '60+':   {essential:[4,8],  athletic:[9,17],  acceptable:[18,28], obeseMin:29}
+  },
+  female: {
+    '20-29': {essential:[10,13], athletic:[14,20], acceptable:[21,31], obeseMin:32},
+    '30-39': {essential:[10,14], athletic:[15,21], acceptable:[22,32], obeseMin:33},
+    '40-49': {essential:[11,15], athletic:[16,22], acceptable:[23,33], obeseMin:34},
+    '50-59': {essential:[12,16], athletic:[17,23], acceptable:[24,34], obeseMin:35},
+    '60+':   {essential:[13,17], athletic:[18,24], acceptable:[25,35], obeseMin:36}
+  }
+};
+
+const WATER_RANGES = {
+  male:   {'20-39':[55,65], '40-59':[53,63], '60+':[50,60]},
+  female: {'20-39':[45,60], '40-59':[43,58], '60+':[40,55]}
+};
+
+const MUSCLE_RANGES = {
+  male:   {'18-39':[33.3,39.3], '40-59':[33.1,39.1], '60+':[33.1,39.0]},
+  female: {'18-39':[24.3,30.3], '40-59':[24.1,30.1], '60+':[23.9,29.9]}
+};
+
+function ageBand5(age){
+  if(age<30) return '20-29';
+  if(age<40) return '30-39';
+  if(age<50) return '40-49';
+  if(age<60) return '50-59';
+  return '60+';
+}
+function waterBand(age){
+  if(age<40) return '20-39';
+  if(age<60) return '40-59';
+  return '60+';
+}
+function muscleBand(age){
+  if(age<40) return '18-39';
+  if(age<60) return '40-59';
+  return '60+';
+}
+
+/* ============================================================
+   I18N
+   ============================================================ */
+const I18N = {
+  en: {
+    appTitle:'Composition Report', appSub:'client scoring & range assessment tool',
+    exportBtn:'Export PDF ↓', exportingBtn:'Rendering…',
+    imageBtn:'Image ↓', imagingBtn:'Rendering…',
+    htmlExportBtn:'Interactive HTML ↓', htmlExportingBtn:'Building…',
+    tourStartBtn:'🧭 Take a Quick Tour', tourStepOf:'Step {i} of {n}',
+    tourNextBtn:'Next ▸', tourBackBtn:'◂ Back', tourSkipBtn:'Skip', tourDoneBtn:'Done',
+    tourStepScoreTitle:'Your Composition Score',
+    tourStepScoreText:'This single number (out of 100) summarizes body fat, muscle, and hydration together — the closer to 100, the closer your readings sit to the lean/healthy end of each range.',
+    tourStepRangeTitle:'Where You Fall in Each Range',
+    tourStepRangeText:'Each bar shows your reading against the healthy range for your age and sex — the marker shows exactly where you land.',
+    tourStepDetailsTitle:'What These Numbers Actually Mean',
+    tourStepDetailsText:'Tap to expand this section any time for a plain-language explanation of BMI, body fat, water, and muscle — including their limitations.',
+    tourStepBuildTitle:'Your Build Classification',
+    tourStepBuildText:'This chart plots BMI against body fat to place your overall build — since BMI alone can\u2019t tell fat from muscle.',
+    tourStepNutritionTitle:'Your Daily Targets',
+    tourStepNutritionText:'Calorie, protein, and water targets calculated specifically from your own numbers and activity level.',
+    tourStepDietTitle:'Sample Diet Plans',
+    tourStepDietText:'Three ready-to-use eating plans. Don\u2019t love a meal? Tap "Try different meals" on any plan for a different option.',
+    shareBtn:'Share ↗', sharingBtn:'Preparing…', shareTitle:'Body Composition Report', shareUnsupported:'Direct sharing isn\u2019t supported on this browser — the image was downloaded instead so you can share it manually.',
+    panelTitle:'Client Measurements',
+    labelClientName:'Client name', hintOptional:'(optional)', phClientName:'e.g. Alex Rivera',
+    labelSex:'Sex', optFemale:'Female', optMale:'Male',
+    labelAge:'Age', hintYrs:'(yrs)',
+    labelHeight:'Height', hintCm:'(cm)',
+    labelWeight:'Weight', hintKg:'(kg)',
+    dividerBIA:'— BIA Reading —',
+    labelFat:'Body fat', hintPct:'(%)',
+    labelWater:'Total body water',
+    labelMuscle:'Skeletal muscle',
+    labelBone:'Bone mass', hintBone:'(kg, optional)',
+    dividerGoals:'— Activity & Goals —',
+    labelActivity:'Activity level', hintActivity:'(for calorie targets)',
+    actSedentary:'Sedentary — desk job, little exercise', actLight:'Light — exercise 1–3x/week',
+    actModerate:'Moderate — exercise 3–5x/week', actActive:'Active — exercise 6–7x/week',
+    actVeryActive:'Very active — hard daily training',
+    dividerDietPrefs:'— Diet Preferences (optional) —',
+    labelDietPattern:'Eating pattern',
+    dpOmnivore:'No restriction', dpPescatarian:'Pescatarian', dpVegetarian:'Vegetarian', dpVegan:'Vegan',
+    labelCuisine:'Cuisine style',
+    cuisineAny:'No preference', cuisineMediterranean:'Mediterranean', cuisineMiddleEastern:'Middle Eastern',
+    cuisineAsian:'Asian', cuisineLatinAmerican:'Latin American', cuisineAmerican:'American',
+    labelAvoid:'Avoid',
+    avoidDairy:'Dairy', avoidGluten:'Gluten', avoidNuts:'Nuts', avoidShellfish:'Shellfish', avoidPork:'Pork', avoidRedMeat:'Red meat',
+    dividerNotes:'— Notes —',
+    dividerDietPrefs:'— Diet Preferences (optional) —',
+    labelDietPattern:'Eating pattern', dpOmnivore:'No restriction', dpPescatarian:'Pescatarian', dpVegetarian:'Vegetarian', dpVegan:'Vegan',
+    labelCuisine:'Cuisine style', cuisineAny:'No preference', cuisineMediterranean:'Mediterranean', cuisineMiddleEastern:'Middle Eastern',
+    cuisineAsian:'Asian', cuisineLatinAmerican:'Latin American', cuisineAmerican:'American',
+    labelAvoid:'Avoid', avoidDairy:'Dairy', avoidGluten:'Gluten', avoidNuts:'Nuts', avoidShellfish:'Shellfish', avoidPork:'Pork', avoidRedMeat:'Red meat',
+    labelNotes:'Trainer notes', hintNotes:'(optional, appears on report)', phNotes:'e.g. Post 8-week cut cycle',
+    dividerSections:'— Report Sections —',
+    toggleOn:'On', toggleOff:'Off',
+    toggleTrend:'Progress Trend', toggleChart:'Score Trends Diagram',
+    toggleDbCompare:'Compared to Database', toggleDiet:'Diet Plans',
+    generateBtn:'Generate Report',
+    dividerHistory:'— Saved Reports —', clearHistoryBtn:'Clear all',
+    historyEmpty:'No saved reports yet — generating a report saves it here automatically.',
+    historyUnsupported:'Saved report history isn\u2019t available — your browser is blocking local storage (e.g. private/incognito mode).',
+    backupBtn:'Back up ↓', restoreBtn:'Restore ↑',
+    backupEmpty:'No saved reports to back up yet.',
+    backupFailed:'Backup failed: ',
+    restoreEmpty:'That file doesn\u2019t contain any recognizable saved reports.',
+    confirmRestore:'Import {n} saved report(s) from this file? Existing reports with the same ID will be overwritten.',
+    restoreDone:'Restored {n} saved report(s).',
+    restoreFailed:'Restore failed: ',
+    hiLoad:'Load', hiDelete:'Delete',
+    confirmDeleteOne:'Delete this saved report? This can\u2019t be undone.',
+    confirmClearAll:'Delete all saved reports? This can\u2019t be undone.',
+    savedToast:'Saved to history',
+    emptyState:'Enter client measurements and select "Generate Report" to build a scored composition report.',
+    reportEyebrow:'Body Composition Assessment', defaultClientName:'Client',
+    scoreOutOf:'/ 100', scoreSubLabel:'Weighted composite of fat, muscle & water sub-scores.',
+    sectionRangePosition:'Range Position', sectionBuildClassification:'Build Classification', sectionNutrition:'Nutrition & Target Recommendations', sectionDietPlans:'Sample Diet Plans', sectionReferenceDetails:'Reference Details',
+    sectionTrend:'Progress Trend', trendChartTitle:'Score, fat, muscle & water',
+    trendChartHint:'Each line is scaled to its own typical change, so normal shifts look similarly sized.',
+    trendMetaTemplate:'{n} prior test(s) on file for this client · first recorded {date}',
+    trendSinceLast:'vs last test', trendSinceFirst:'vs first test', trendScoreLabel:'Score',
+    sectionDbOverview:'Database Overview',
+    dbOverviewMetaTemplate:'Averages across {n} saved test(s) for {c} client(s)',
+    dbAverageBtn:'Generate report from database averages',
+    dbAverageClientName:'Database Average',
+    dbAverageNote:'Synthetic report generated from the current averages of {n} saved test(s) in this database — not an individual client.',
+    sectionDbCompare:'Compared to Database',
+    dbCompareMetaTemplate:'Ranked against {n} other saved test(s) in this database',
+    dbCompareOfN:'of {n} records',
+    topPercentLabel:'Top {p}%', bottomPercentLabel:'Bottom {p}%',
+    weightsNote:'Total score weighting — Body Fat 40% · Skeletal Muscle 30% · Total Body Water 30%. BMI shown for context only (not weighted into score).',
+    disclaimer:'Reference ranges are aggregated from published consumer BIA / population body-composition guidance (fat: age & sex banded essential / athletic / acceptable / obese thresholds; water & skeletal muscle: general adult consensus bands). BIA estimates vary ±3–5% from DEXA/MRI reference methods and are sensitive to hydration, meal timing, and recent exercise — use consistent test conditions and treat scores as a trend indicator, not a clinical diagnosis. Bone mass is shown for trend tracking only; BIA does not measure true bone mineral density.',
+    errMissing:'Please fill in: ', exportFailed:'Export failed: ',
+    warnBMI:'BMI works out to {bmi} — far outside the typical adult range. Double-check height and weight.',
+    warnFat:'Body fat % looks unusually low or high for this sex — double-check the reading.',
+    warnWater:'Total body water % is outside the typical human range (35–75%) — double-check the reading.',
+    warnMuscle:'Skeletal muscle % is outside the typical human range (15–55%) — double-check the reading.',
+    warnFatWaterSum:'Body fat % + water % together leave almost no room for protein/mineral mass — double-check both readings.',
+    warnMuscleExceeds:'Skeletal muscle % is higher than 100% minus body fat % (i.e. exceeds fat-free mass) — double-check both readings.',
+    warnBMI:'BMI of {bmi} is far outside the typical human range — double-check height and weight.',
+    warnFat:'That body fat % is outside the typical human range for the selected sex — double-check the entry.',
+    warnWater:'That total body water % is outside the typical human range — double-check the entry.',
+    warnMuscle:'That skeletal muscle % is outside the typical human range — double-check the entry.',
+    warnFatWaterSum:'Body fat % + water % together leave almost no room for protein/mineral mass — double-check both entries.',
+    warnMuscleExceeds:'Skeletal muscle % can\u2019t plausibly exceed fat-free mass (100 − body fat %) — double-check fat % and muscle %.',
+    gaugeFat:'Body Fat', gaugeWater:'Total Body Water', gaugeMuscle:'Skeletal Muscle', gaugeBMI:'BMI', gaugeBone:'Bone Mass',
+    bmiCalcLabel:'Calculation:', bmiCaveat:'BMI only weighs height against total body weight — it can\u2019t tell fat from muscle. Athletes, heavily muscled clients, and other atypical builds often land in "overweight" or "obese" BMI bands despite low body fat, while someone with little muscle can post a "normal" BMI and still carry high body fat. That\u2019s exactly why the fat/water/muscle readings above and the build-classification chart below matter more than BMI alone for this client.',
+    referenceDetailsHint:'What each reading means, how it\u2019s calculated where applicable, and its main caveat.',
+    fatCaveat:'Body fat % is estimated from BIA-measured electrical resistance, since fat conducts electricity poorly compared to lean tissue. Essential fat (roughly 2–5% for men, 10–13% for women) is required for normal hormonal and organ function — dropping below the athletic band isn\u2019t a further improvement, it\u2019s a health risk.',
+    waterCaveat:'Total body water is the share of body weight that\u2019s fluid. It runs naturally higher in leaner, more muscular people (muscle tissue is roughly 73% water) and lower with higher body fat. A single reading can shift several points with hydration status, recent exercise, or meal timing — track the trend rather than one reading alone.',
+    muscleCaveat:'Skeletal muscle % is the share of body weight made up of muscle attached to the skeleton — distinct from total fat-free mass, which also includes organs, bone, and water. BIA estimates this from population-average regression equations rather than a direct scan, making it the least precise of these four readings compared to DEXA or MRI; treat it as a trend indicator rather than an exact figure.',
+    zBelowEssential:'Below essential', zEssential:'Essential', zAthletic:'Athletic / Fit', zAcceptable:'Acceptable', zAboveHealthy:'Above healthy range',
+    zBelowRange:'Below range', zInRange:'In range', zAboveRange:'Above range',
+    zLow:'Low', zNormal:'Normal', zHigh:'High',
+    contextOnly:'context only', notScored:'Not scored', subScore:'sub-score',
+    boneNote:'No standardized BIA reference range — tracked for trend only',
+    athleticAcceptable:'Athletic–Acceptable band', healthyRange:'Healthy range', normalRange:'Normal range', whoRange:'WHO healthy range 18.5–24.9',
+    bmiUnder:'Underweight', bmiNormal:'Normal', bmiOver:'Overweight', bmiObese:'Obese',
+    chartZones:{
+      slim:'Slim', slimUnder:'Very Lean', underHighFat:'Underweight, High Fat',
+      athletic:'Athletic', fitHealthy:'Fit / Healthy', skinnyFat:'Skinny-Fat',
+      muscular:'Muscular', overweightBuild:'Big Build', overweight:'Overweight',
+      muscularHeavy:'Bulky', obeseMuscular:'Muscular, High Fat', obese:'Obese'
+    },
+    axisBMI:'BMI', axisFat:'Body Fat %',
+    legendAthletic:'Athletic / lean fat', legendFit:'Fit / Healthy', legendSkinnyOver:'Skinny-fat / Overweight',
+    legendObese:'Obese range', legendClient:'Client', legendTarget:'Target',
+    grades:{excellent:'Excellent', good:'Good', fair:'Fair', needsWork:'Needs Work', priority:'High Priority'},
+    sexLabelMale:'Male', sexLabelFemale:'Female', yrsSuffix:'yrs',
+    suggestedTarget:'Suggested target', note:'Note',
+    nutrition:{
+      goalLabel:{
+        fatLossHigh:'Goal: Fat Loss (larger deficit)',
+        fatLossModerate:'Goal: Fat Loss (moderate deficit)',
+        muscleGain:'Goal: Lean Muscle Gain (small surplus)',
+        recomp:'Goal: Recomposition (mild deficit, high protein)',
+        maintainCaution:'Goal: Maintain — already at/near essential fat, do not restrict further'
+      },
+      maintenanceWord:'maintenance', rateNA:'not applicable', perWeek:'week', perDay:'day', kcalPerDay:'kcal/day',
+      cardTdee:'Est. Maintenance (TDEE)', cardTarget:'Daily Calorie Target', cardProtein:'Protein Target',
+      cardWater:'Water Target', cardPace:'Expected Pace', cardFiberSub:'fibre ≈ {f} g/day',
+      rationale:{
+        fatLossHigh:'Deficit sized at ~25% of estimated TDEE (capped 500–1000 kcal/day), in line with NHLBI/NIH obesity-treatment guidelines targeting roughly 0.5–1 kg of loss per week. Protein is raised toward the upper end of the ISSN-recommended range to protect lean mass during the larger deficit.',
+        fatLossModerate:'A more moderate ~20% deficit (capped near 400–500 kcal/day) fits ISSN guidance that leaner individuals need smaller deficits to avoid losing lean mass. Protein stays toward the upper end of the 1.0–1.8 g/kg range since that\u2019s what actually preserves muscle in a cut, not the deficit size itself.',
+        muscleGain:'A small 200–300 kcal/day surplus (~10–15% of TDEE) reflects Iraki et al. (2019) and related lean-bulk research — larger surpluses mainly add fat rather than speeding muscle growth. Protein in the 1.0–1.8 g/kg range supports lean gain without pushing intake higher than needed.',
+        recomp:'Fat is already within a healthy band and muscle is adequate, so a gentle ~10% deficit paired with protein toward the upper end of the 1.0–1.8 g/kg range and resistance training targets simultaneous fat loss and muscle retention — a recomposition approach supported by research in both trained and untrained populations.',
+        maintainCaution:'Body fat is already at or below the essential-fat threshold for this age/sex. Further caloric restriction is not recommended below this point — it carries real health risk (hormonal, immune, and bone-health consequences). Maintenance calories with adequate protein are shown instead; consider referring to a physician or registered dietitian before any further change.'
+      },
+      sources:'Formulas: Mifflin–St Jeor BMR; ISSN Position Stands on Protein & Exercise (2017) and Diets & Body Composition (2017); NHLBI/NIH obesity clinical guidelines; Iraki, Fitschen, Espinar & Helms (2019); EFSA Dietary Reference Values for Water (2010, scaled per kg bodyweight); IOM fibre heuristic (~14 g/1000 kcal). General population guidance only — not a substitute for individualized advice from a registered dietitian or physician, particularly for pregnancy, disordered eating history, or diagnosed medical conditions.'
+    },
+    dietPlans:{
+      subtitle:'Three evidence-informed eating patterns, sized to this client\u2019s own estimated calorie needs — pick whichever fits the goal, or use the one highlighted below. Meals adapt to the diet preferences set on the left.',
+      recommendedBadge:'\u2605 Recommended for this client',
+      shuffleBtn:'🔄 Try different meals',
+      kcalPerDay:'kcal/day', macroProtein:'Protein', macroCarb:'Carbs', macroFat:'Fat',
+      plans:{
+        highProtein:{ title:'Lean & Defined', tagline:'High-protein cut — preserves muscle in a deficit (ISSN, 2017)' },
+        muscleGain:{ title:'Strength & Size', tagline:'Lean bulk — small surplus builds muscle, not fat (Iraki et al., 2019)' },
+        balanced:{ title:'Performance & Balance', tagline:'Mediterranean-style recomposition — steady fat loss, muscle retained' }
+      }
+    },
+    mealSlotLabels:{ breakfast:'Breakfast —', lunch:'Lunch —', dinner:'Dinner —', snack:'Snack —' },
+    mealFoods:{
+      hpB1:'4 egg whites + 1 whole egg omelet, 1 cup spinach, 1 slice whole-grain toast',
+      hpB2:'{p}g Greek yogurt, handful berries, 1 tbsp chia seeds',
+      hpB3:'Tofu scramble ({p}g tofu) with turmeric &amp; peppers, ¼ avocado',
+      hpL1:'{p}g grilled chicken breast, large mixed salad, 1 tbsp olive oil, ½ cup cooked quinoa',
+      hpL2:'{p}g baked cod, roasted vegetables, ½ cup cooked brown rice',
+      hpL3:'Grilled tofu &amp; edamame bowl ({p}g tofu), ½ cup brown rice, sesame-soy dressing',
+      hpD1:'{p}g baked salmon, 1 cup steamed broccoli, 100g sweet potato',
+      hpD2:'Lean turkey chili ({p}g ground turkey) with beans, side salad',
+      hpD3:'Lentil &amp; vegetable curry ({p}g cooked lentils), cauliflower rice',
+      hpS1:'{p}g Greek yogurt, small handful (20g) almonds',
+      hpS2:'Whey protein shake ({p}g), 2 rice cakes',
+      hpS3:'3 tbsp hummus, carrot &amp; cucumber sticks',
+      mgB1:'{c}g dry oats, 1 scoop (30g) whey protein, 1 banana, 1 tbsp peanut butter',
+      mgB2:'Shakshuka (2 eggs poached in tomato-pepper sauce), 1 whole-wheat pita',
+      mgB3:'Overnight oats ({c}g) with soy milk, 1 tbsp chia, mixed berries',
+      mgL1:'{p}g chicken, 1 cup cooked rice, roasted vegetables, ¼ avocado',
+      mgL2:'{p}g beef &amp; vegetable stir-fry, 1 cup cooked rice',
+      mgL3:'Chickpea &amp; vegetable rice bowl ({p}g chickpeas), tahini dressing',
+      mgD1:'{p}g grilled steak, roasted potatoes, green beans',
+      mgD2:'{p}g salmon teriyaki, 1 cup steamed rice, stir-fried bok choy',
+      mgD3:'Black bean &amp; sweet potato enchiladas (2 tortillas)',
+      mgS1:'Protein shake (30g whey + milk), 30g mixed nuts',
+      mgS2:'{p}g cottage cheese, ½ cup pineapple',
+      mgS3:'Trail mix — dried fruit, nuts, dark chocolate (40g)',
+      baB1:'{p}g Greek yogurt, 40g oats, 15g walnuts, handful berries',
+      baB2:'Shakshuka (2 eggs), 1 whole-grain pita',
+      baB3:'Chia pudding (3 tbsp chia, almond milk), mango, pumpkin seeds',
+      baL1:'Grilled chicken wrap ({p}g chicken, 1 whole-wheat tortilla), 2 tbsp hummus, mixed vegetables',
+      baL2:'Falafel wrap ({p}g falafel, 1 whole-wheat tortilla), 2 tbsp hummus, mixed vegetables',
+      baL3:'Tuna &amp; white bean salad ({p}g tuna), olive oil &amp; lemon dressing',
+      baD1:'{p}g grilled sea bass, roasted vegetables, ¾ cup cooked brown rice',
+      baD2:'Braised lentils &amp; vegetables ({p}g cooked lentils), ¾ cup cooked brown rice',
+      baD3:'Herb-roasted chicken thighs ({p}g), roasted root vegetables',
+      baS1:'1 medium apple, 20g almonds',
+      baS2:'3 tbsp hummus, whole-grain crackers',
+      baS3:'1 orange, 2 tbsp pumpkin seeds'
+    },
+  },
+  fa: {
+    appTitle:'گزارش ترکیب بدن', appSub:'ابزار امتیازدهی و ارزیابی محدوده برای مراجعان',
+    exportBtn:'خروجی PDF ↓', exportingBtn:'در حال آماده‌سازی…',
+    imageBtn:'تصویر ↓', imagingBtn:'در حال آماده‌سازی…',
+    htmlExportBtn:'HTML تعاملی ↓', htmlExportingBtn:'در حال ساخت…',
+    tourStartBtn:'🧭 یک تور کوتاه ببینید', tourStepOf:'مرحلهٔ {i} از {n}',
+    tourNextBtn:'بعدی ▸', tourBackBtn:'◂ قبلی', tourSkipBtn:'رد کردن', tourDoneBtn:'پایان',
+    tourStepScoreTitle:'امتیاز ترکیب بدن شما',
+    tourStepScoreText:'این یک عدد (از ۱۰۰) چربی، عضله و آب بدن را با هم خلاصه می‌کند — هرچه به ۱۰۰ نزدیک‌تر باشد، مقادیر شما به انتهای لاغر و سالم هر محدوده نزدیک‌تر است.',
+    tourStepRangeTitle:'جایگاه شما در هر محدوده',
+    tourStepRangeText:'هر نوار، مقدار شما را در برابر محدودهٔ سالم متناسب با سن و جنسیت شما نشان می‌دهد — نشانگر دقیقاً محل قرارگیری شما را نشان می‌دهد.',
+    tourStepDetailsTitle:'این اعداد واقعاً چه معنایی دارند',
+    tourStepDetailsText:'هر زمان خواستید، این بخش را باز کنید تا توضیحی ساده دربارهٔ BMI، چربی بدن، آب و عضله — همراه با محدودیت‌های آن‌ها — ببینید.',
+    tourStepBuildTitle:'دسته‌بندی ترکیب بدن شما',
+    tourStepBuildText:'این نمودار BMI را در برابر چربی بدن ترسیم می‌کند تا هیکل کلی شما را مشخص کند — چون BMI به‌تنهایی نمی‌تواند چربی را از عضله تشخیص دهد.',
+    tourStepNutritionTitle:'اهداف روزانهٔ شما',
+    tourStepNutritionText:'اهداف کالری، پروتئین و آب، به‌طور اختصاصی بر اساس اعداد و سطح فعالیت خود شما محاسبه شده‌اند.',
+    tourStepDietTitle:'نمونه برنامه‌های غذایی',
+    tourStepDietText:'سه برنامهٔ غذایی آماده. غذایی را دوست ندارید؟ روی «غذاهای دیگر» در هر برنامه بزنید تا گزینهٔ دیگری ببینید.',
+    shareBtn:'اشتراک‌گذاری ↗', sharingBtn:'در حال آماده‌سازی…', shareTitle:'گزارش ترکیب بدنی', shareUnsupported:'اشتراک‌گذاری مستقیم در این مرورگر پشتیبانی نمی‌شود — به‌جای آن تصویر دانلود شد تا بتوانید آن را به‌صورت دستی ارسال کنید.',
+    panelTitle:'اندازه‌گیری‌های مراجع',
+    labelClientName:'نام مراجع', hintOptional:'(اختیاری)', phClientName:'برای مثال: علی رضایی',
+    labelSex:'جنسیت', optFemale:'زن', optMale:'مرد',
+    labelAge:'سن', hintYrs:'(سال)',
+    labelHeight:'قد', hintCm:'(سانتی‌متر)',
+    labelWeight:'وزن', hintKg:'(کیلوگرم)',
+    dividerBIA:'— قرائت BIA —',
+    labelFat:'درصد چربی بدن', hintPct:'(٪)',
+    labelWater:'درصد آب بدن',
+    labelMuscle:'درصد عضله اسکلتی',
+    labelBone:'توده استخوانی', hintBone:'(کیلوگرم، اختیاری)',
+    dividerGoals:'— فعالیت و هدف —',
+    labelActivity:'سطح فعالیت', hintActivity:'(برای محاسبه هدف کالری)',
+    actSedentary:'کم‌تحرک — کار پشت میز، ورزش کم', actLight:'سبک — ۱ تا ۳ بار تمرین در هفته',
+    actModerate:'متوسط — ۳ تا ۵ بار تمرین در هفته', actActive:'فعال — ۶ تا ۷ بار تمرین در هفته',
+    actVeryActive:'بسیار فعال — تمرین سنگین روزانه',
+    dividerDietPrefs:'— ترجیحات تغذیه‌ای (اختیاری) —',
+    labelDietPattern:'الگوی خوراکی',
+    dpOmnivore:'بدون محدودیت', dpPescatarian:'پسکاتارین (فقط ماهی)', dpVegetarian:'گیاه‌خوار', dpVegan:'وگان',
+    labelCuisine:'سبک غذایی',
+    cuisineAny:'بدون ترجیح', cuisineMediterranean:'مدیترانه‌ای', cuisineMiddleEastern:'خاورمیانه‌ای',
+    cuisineAsian:'آسیایی', cuisineLatinAmerican:'آمریکای لاتین', cuisineAmerican:'آمریکایی',
+    labelAvoid:'پرهیز از',
+    avoidDairy:'لبنیات', avoidGluten:'گلوتن', avoidNuts:'آجیل', avoidShellfish:'صدف و میگو', avoidPork:'گوشت خوک', avoidRedMeat:'گوشت قرمز',
+    dividerNotes:'— یادداشت‌ها —',
+    dividerDietPrefs:'— ترجیحات غذایی (اختیاری) —',
+    labelDietPattern:'الگوی غذایی', dpOmnivore:'بدون محدودیت', dpPescatarian:'پسکاتارین', dpVegetarian:'گیاه‌خوار', dpVegan:'وگان',
+    labelCuisine:'سبک آشپزی', cuisineAny:'بدون ترجیح', cuisineMediterranean:'مدیترانه‌ای', cuisineMiddleEastern:'خاورمیانه‌ای',
+    cuisineAsian:'آسیایی', cuisineLatinAmerican:'آمریکای لاتین', cuisineAmerican:'آمریکایی',
+    labelAvoid:'پرهیز از', avoidDairy:'لبنیات', avoidGluten:'گلوتن', avoidNuts:'آجیل', avoidShellfish:'صدف و میگو', avoidPork:'گوشت خوک', avoidRedMeat:'گوشت قرمز',
+    labelNotes:'یادداشت مربی', hintNotes:'(اختیاری، در گزارش نمایش داده می‌شود)', phNotes:'برای مثال: پس از ۸ هفته دوره کات',
+    dividerSections:'— بخش‌های گزارش —',
+    toggleOn:'روشن', toggleOff:'خاموش',
+    toggleTrend:'روند پیشرفت', toggleChart:'نمودار روند امتیاز',
+    toggleDbCompare:'مقایسه با پایگاه داده', toggleDiet:'برنامه‌های غذایی',
+    generateBtn:'ایجاد گزارش',
+    dividerHistory:'— گزارش‌های ذخیره‌شده —', clearHistoryBtn:'پاک کردن همه',
+    historyEmpty:'هنوز گزارشی ذخیره نشده — با ایجاد گزارش، به‌طور خودکار اینجا ذخیره می‌شود.',
+    historyUnsupported:'تاریخچهٔ گزارش‌های ذخیره‌شده در دسترس نیست — مرورگر شما ذخیره‌سازی محلی را مسدود کرده است (مثلاً حالت خصوصی/ناشناس).',
+    backupBtn:'پشتیبان‌گیری ↓', restoreBtn:'بازیابی ↑',
+    backupEmpty:'هنوز گزارشی برای پشتیبان‌گیری وجود ندارد.',
+    backupFailed:'پشتیبان‌گیری ناموفق بود: ',
+    restoreEmpty:'این فایل حاوی هیچ گزارش ذخیره‌شدهٔ قابل شناسایی نیست.',
+    confirmRestore:'{n} گزارش ذخیره‌شده از این فایل وارد شود؟ گزارش‌های موجود با همان شناسه بازنویسی خواهند شد.',
+    restoreDone:'{n} گزارش ذخیره‌شده بازیابی شد.',
+    restoreFailed:'بازیابی ناموفق بود: ',
+    hiLoad:'بازیابی', hiDelete:'حذف',
+    confirmDeleteOne:'این گزارش ذخیره‌شده حذف شود؟ این کار قابل بازگشت نیست.',
+    confirmClearAll:'همهٔ گزارش‌های ذخیره‌شده حذف شوند؟ این کار قابل بازگشت نیست.',
+    savedToast:'در تاریخچه ذخیره شد',
+    emptyState:'اندازه‌گیری‌های مراجع را وارد کرده و «ایجاد گزارش» را بزنید تا گزارش امتیازدهی‌شده ساخته شود.',
+    reportEyebrow:'ارزیابی ترکیب بدن', defaultClientName:'مراجع',
+    scoreOutOf:'از 100', scoreSubLabel:'میانگین وزنی امتیازهای چربی، عضله و آب بدن.',
+    sectionRangePosition:'جایگاه در محدوده', sectionBuildClassification:'دسته‌بندی ترکیب بدنی', sectionNutrition:'توصیه‌های تغذیه و اهداف', sectionDietPlans:'نمونه برنامه‌های غذایی', sectionReferenceDetails:'جزئیات مرجع',
+    sectionTrend:'روند پیشرفت', trendChartTitle:'امتیاز، چربی، عضله و آب',
+    trendChartHint:'هر خط بر اساس تغییر معمول خودش مقیاس‌بندی شده تا تغییرات عادی اندازه‌ای مشابه نشان دهند.',
+    trendMetaTemplate:'{n} آزمایش قبلی برای این مراجع ثبت شده · اولین ثبت {date}',
+    trendSinceLast:'نسبت به آزمایش قبلی', trendSinceFirst:'نسبت به اولین آزمایش', trendScoreLabel:'امتیاز',
+    sectionDbOverview:'نمای کلی پایگاه داده',
+    dbOverviewMetaTemplate:'میانگین {n} آزمایش ذخیره‌شده برای {c} مراجع',
+    dbAverageBtn:'ایجاد گزارش از میانگین‌های پایگاه داده',
+    dbAverageClientName:'میانگین پایگاه داده',
+    dbAverageNote:'گزارش مصنوعی ساخته‌شده از میانگین فعلی {n} آزمایش ذخیره‌شده در این پایگاه داده — نه یک مراجع واقعی.',
+    sectionDbCompare:'مقایسه با پایگاه داده',
+    dbCompareMetaTemplate:'رتبه‌بندی نسبت به {n} آزمایش دیگر ذخیره‌شده در این پایگاه داده',
+    dbCompareOfN:'از {n} رکورد',
+    topPercentLabel:'{p}% برتر', bottomPercentLabel:'{p}% پایین‌تر',
+    weightsNote:'وزن‌دهی امتیاز کل — چربی بدن 40% · عضله اسکلتی 30% · آب بدن 30%. BMI فقط جهت اطلاع نمایش داده می‌شود و در امتیاز محاسبه نمی‌شود.',
+    disclaimer:'محدوده‌های مرجع از منابع منتشرشده درباره دستگاه‌های BIA خانگی و راهنماهای جمعیتی ترکیب بدن گردآوری شده‌اند (چربی: آستانه‌های ضروری/ورزشکاری/قابل‌قبول/چاقی بر اساس سن و جنسیت؛ آب و عضله اسکلتی: محدوده‌های عمومی بزرگسالان). داده‌های BIA معمولاً ۳ تا ۵ درصد با روش‌های مرجع مانند DEXA یا MRI تفاوت دارند و به میزان هیدراتاسیون، زمان غذا خوردن و ورزش اخیر حساس‌اند — برای مقایسه دقیق از شرایط آزمایش یکسان استفاده کنید و امتیاز را شاخصی برای روند در نظر بگیرید، نه تشخیص بالینی. توده استخوانی فقط برای پیگیری روند نمایش داده می‌شود؛ BIA تراکم واقعی استخوان را اندازه‌گیری نمی‌کند.',
+    errMissing:'لطفاً موارد زیر را تکمیل کنید: ', exportFailed:'خروجی گرفتن ناموفق بود: ',
+    warnBMI:'شاخص توده بدنی برابر با {bmi} است — بسیار خارج از محدودهٔ معمول بزرگسالان. قد و وزن را دوباره بررسی کنید.',
+    warnFat:'درصد چربی بدن برای این جنسیت غیرعادی کم یا زیاد به نظر می‌رسد — مقدار را دوباره بررسی کنید.',
+    warnWater:'درصد آب کل بدن خارج از محدودهٔ معمول انسانی (۳۵ تا ۷۵ درصد) است — مقدار را دوباره بررسی کنید.',
+    warnMuscle:'درصد عضلهٔ اسکلتی خارج از محدودهٔ معمول انسانی (۱۵ تا ۵۵ درصد) است — مقدار را دوباره بررسی کنید.',
+    warnFatWaterSum:'مجموع درصد چربی و آب بدن تقریباً جایی برای پروتئین و مواد معدنی باقی نمی‌گذارد — هر دو مقدار را دوباره بررسی کنید.',
+    warnMuscleExceeds:'درصد عضلهٔ اسکلتی از ۱۰۰ منهای درصد چربی بدن (یعنی از تودهٔ بدون چربی) بیشتر است — هر دو مقدار را دوباره بررسی کنید.',
+    gaugeFat:'چربی بدن', gaugeWater:'آب بدن', gaugeMuscle:'عضله اسکلتی', gaugeBMI:'BMI', gaugeBone:'توده استخوانی',
+    bmiCalcLabel:'محاسبه:', bmiCaveat:'شاخص توده بدنی فقط قد را در برابر وزن کل بدن می‌سنجد — نمی‌تواند چربی را از عضله تشخیص دهد. ورزشکاران، مراجعان با عضلات حجیم و سایر هیکل‌های غیرمعمول اغلب با وجود چربی بدن پایین، در محدودهٔ «اضافه‌وزن» یا «چاقی» BMI قرار می‌گیرند؛ در مقابل، فردی با عضلهٔ کم می‌تواند BMI «طبیعی» داشته باشد و همچنان چربی بدن بالایی داشته باشد. دقیقاً به همین دلیل، مقادیر چربی/آب/عضله در بالا و نمودار دسته‌بندی ترکیب بدن در پایین، برای این مراجع مهم‌تر از BMI به‌تنهایی هستند.',
+    referenceDetailsHint:'معنای هر مقدار، نحوهٔ محاسبهٔ آن در صورت وجود فرمول، و مهم‌ترین نکتهٔ احتیاطی آن.',
+    fatCaveat:'درصد چربی بدن از مقاومت الکتریکی اندازه‌گیری‌شده با BIA تخمین زده می‌شود، زیرا چربی نسبت به بافت بدون چربی، رسانایی الکتریکی ضعیف‌تری دارد. چربی ضروری (تقریباً ۲ تا ۵ درصد در مردان، ۱۰ تا ۱۳ درصد در زنان) برای عملکرد طبیعی هورمونی و اندام‌ها لازم است — پایین آمدن از محدودهٔ ورزشکاری، بهبود بیشتر نیست، بلکه یک خطر سلامتی است.',
+    waterCaveat:'آب کل بدن، سهمی از وزن بدن است که مایع محسوب می‌شود. این مقدار به‌طور طبیعی در افراد لاغرتر و عضلانی‌تر بالاتر است (بافت عضله تقریباً ۷۳ درصد آب است) و با افزایش چربی بدن کاهش می‌یابد. یک قرائت منفرد می‌تواند با وضعیت هیدراتاسیون، ورزش اخیر یا زمان‌بندی وعده‌های غذایی چند واحد تغییر کند — روند را دنبال کنید نه یک قرائت به‌تنهایی.',
+    muscleCaveat:'درصد عضلهٔ اسکلتی، سهمی از وزن بدن است که عضلات متصل به اسکلت را شامل می‌شود — که با تودهٔ کل بدون چربی که اندام‌ها، استخوان و آب را نیز دربر می‌گیرد متفاوت است. BIA این مقدار را از معادلات رگرسیون میانگین جمعیتی تخمین می‌زند نه یک اسکن مستقیم، به همین دلیل در مقایسه با DEXA یا MRI، کم‌دقت‌ترین این چهار قرائت است؛ آن را بیشتر به‌عنوان شاخص روند در نظر بگیرید تا عددی دقیق.',
+    zBelowEssential:'کمتر از حد ضروری', zEssential:'چربی ضروری', zAthletic:'ورزشکاری / آماده', zAcceptable:'قابل قبول', zAboveHealthy:'بالاتر از محدوده سالم',
+    zBelowRange:'کمتر از محدوده', zInRange:'در محدوده', zAboveRange:'بالاتر از محدوده',
+    zLow:'پایین', zNormal:'طبیعی', zHigh:'بالا',
+    contextOnly:'فقط جهت اطلاع', notScored:'بدون امتیاز', subScore:'امتیاز فرعی',
+    boneNote:'محدوده مرجع استاندارد BIA وجود ندارد — فقط برای پیگیری روند ثبت می‌شود',
+    athleticAcceptable:'محدوده ورزشکاری تا قابل‌قبول', healthyRange:'محدوده سالم', normalRange:'محدوده طبیعی', whoRange:'محدوده سالم WHO: 18.5–24.9',
+    bmiUnder:'کمبود وزن', bmiNormal:'طبیعی', bmiOver:'اضافه‌وزن', bmiObese:'چاق',
+    chartZones:{
+      slim:'لاغر', slimUnder:'ریزه‌اندام', underHighFat:'لاغر با چربی بالا',
+      athletic:'ورزشکاری', fitHealthy:'متناسب و سالم', skinnyFat:'لاغر-چاق',
+      muscular:'عضلانی', overweightBuild:'قوی‌هیکل', overweight:'اضافه‌وزن',
+      muscularHeavy:'حجیم', obeseMuscular:'چاق و عضلانی', obese:'چاق'
+    },
+    axisBMI:'BMI', axisFat:'درصد چربی بدن',
+    legendAthletic:'ورزشکاری / چربی کم', legendFit:'متناسب و سالم', legendSkinnyOver:'لاغر-چاق / اضافه‌وزن',
+    legendObese:'محدوده چاقی', legendClient:'مراجع', legendTarget:'هدف',
+    grades:{excellent:'عالی', good:'خوب', fair:'متوسط', needsWork:'نیاز به تلاش', priority:'اولویت بالا'},
+    sexLabelMale:'مرد', sexLabelFemale:'زن', yrsSuffix:'ساله',
+    suggestedTarget:'هدف پیشنهادی', note:'یادداشت',
+    nutrition:{
+      goalLabel:{
+        fatLossHigh:'هدف: کاهش چربی (کسری کالری بیشتر)',
+        fatLossModerate:'هدف: کاهش چربی (کسری کالری متوسط)',
+        muscleGain:'هدف: افزایش عضله (مازاد کالری کم)',
+        recomp:'هدف: بازسازی ترکیب بدن (کسری ملایم، پروتئین بالا)',
+        maintainCaution:'هدف: حفظ وضعیت — چربی بدن در آستانه یا کمتر از حد ضروری است؛ محدودیت بیشتر توصیه نمی‌شود'
+      },
+      maintenanceWord:'نگهداری', rateNA:'قابل اعمال نیست', perWeek:'هفته', perDay:'روز', kcalPerDay:'کیلوکالری/روز',
+      cardTdee:'کالری نگهدارنده تخمینی (TDEE)', cardTarget:'هدف کالری روزانه', cardProtein:'هدف پروتئین',
+      cardWater:'هدف آب', cardPace:'روند مورد انتظار', cardFiberSub:'فیبر ≈ {f} گرم/روز',
+      rationale:{
+        fatLossHigh:'میزان کسری کالری حدود ۲۵٪ از TDEE تخمینی (با سقف ۵۰۰ تا ۱۰۰۰ کیلوکالری در روز) در نظر گرفته شده که با راهنمای بالینی چاقی NHLBI/NIH هم‌راستاست و هدف آن کاهش تقریبی ۰.۵ تا ۱ کیلوگرم در هفته است. پروتئین به سمت بالای محدوده توصیه‌شده ISSN افزایش یافته تا از توده عضلانی در طول این کسری بزرگ‌تر محافظت شود.',
+        fatLossModerate:'کسری کالری متوسط‌تر (حدود ۲۰٪، با سقف ۴۰۰ تا ۵۰۰ کیلوکالری در روز) مطابق با توصیه ISSN است که افراد لاغرتر به کسری‌های کوچک‌تر نیاز دارند تا توده بدون‌چربی از دست نرود. پروتئین در انتهای بالای محدودهٔ ۱.۰ تا ۱.۸ گرم به ازای هر کیلوگرم نگه داشته می‌شود، زیرا این عامل، نه اندازهٔ کسری کالری، تعیین‌کنندهٔ اصلی حفظ عضله در دورهٔ کات است.',
+        muscleGain:'مازاد کالری کوچک ۲۰۰ تا ۳۰۰ کیلوکالری در روز (حدود ۱۰ تا ۱۵٪ از TDEE) بر اساس پژوهش Iraki و همکاران (۲۰۱۹) و مطالعات مشابه درباره حجم‌گیری تمیز تعیین شده است — مازادهای بزرگ‌تر عمدتاً چربی اضافه می‌کنند نه رشد سریع‌تر عضله. پروتئین در محدودهٔ ۱.۰ تا ۱.۸ گرم به ازای هر کیلوگرم، رشد بدون‌چربی را بدون نیاز به مصرف بیشتر پشتیبانی می‌کند.',
+        recomp:'از آنجا که چربی بدن هم‌اکنون در محدوده سالم و عضله در حد کافی قرار دارد، یک کسری ملایم حدود ۱۰٪ همراه با پروتئین در انتهای بالای محدودهٔ ۱.۰ تا ۱.۸ گرم به ازای هر کیلوگرم و تمرین مقاومتی، به‌طور هم‌زمان کاهش چربی و حفظ/افزایش عضله را هدف قرار می‌دهد؛ رویکردی که در پژوهش‌های بازترکیب بدن هم در افراد تمرین‌کرده و هم تازه‌کار تأیید شده است.',
+        maintainCaution:'درصد چربی بدن هم‌اکنون در آستانه یا کمتر از حد ضروری برای این سن و جنسیت است. محدودیت بیشتر کالری در این سطح توصیه نمی‌شود، زیرا خطر واقعی برای سلامت (اختلال هورمونی، ایمنی و سلامت استخوان) دارد. به‌جای آن کالری نگهدارنده همراه با پروتئین کافی نمایش داده شده است؛ پیش از هرگونه تغییر بیشتر، مشورت با پزشک یا متخصص تغذیه توصیه می‌شود.'
+      },
+      sources:'فرمول‌ها: معادله BMR میفلین-سنت جیور؛ بیانیه‌های موضع ISSN درباره پروتئین و ورزش (۲۰۱۷) و رژیم غذایی و ترکیب بدن (۲۰۱۷)؛ راهنمای بالینی چاقی NHLBI/NIH؛ پژوهش Iraki، Fitschen، Espinar و Helms (۲۰۱۹)؛ مقادیر مرجع آب EFSA (۲۰۱۰، مقیاس‌شده بر اساس وزن بدن)؛ قاعده تقریبی فیبر IOM (حدود ۱۴ گرم به ازای هر ۱۰۰۰ کیلوکالری). این توصیه‌ها راهنمای عمومی هستند، نه جایگزین مشاوره فردی از متخصص تغذیه یا پزشک، به‌ویژه در دوران بارداری، سابقه اختلال خوردن یا بیماری‌های تشخیص داده‌شده.'
+    },
+    dietPlans:{
+      subtitle:'سه الگوی غذایی مبتنی بر پژوهش که بر اساس نیاز کالری تخمینی همین مراجع محاسبه شده — هرکدام را متناسب با هدف انتخاب کنید یا از گزینهٔ پیشنهادی زیر استفاده کنید. وعده‌های غذایی بر اساس ترجیحات تغذیه‌ای سمت چپ تنظیم می‌شوند.',
+      recommendedBadge:'\u2605 پیشنهادی برای این مراجع',
+      shuffleBtn:'🔄 غذاهای دیگر',
+      kcalPerDay:'کیلوکالری/روز', macroProtein:'پروتئین', macroCarb:'کربوهیدرات', macroFat:'چربی',
+      plans:{
+        highProtein:{ title:'لاغر و خط‌دار', tagline:'رژیم پرپروتئین برای کات — حفظ عضله در کسری کالری (ISSN، ۲۰۱۷)' },
+        muscleGain:{ title:'قدرت و حجم', tagline:'حجم‌گیری تمیز — مازاد کوچک، رشد عضله بدون چربی اضافه (Iraki و همکاران، ۲۰۱۹)' },
+        balanced:{ title:'عملکرد و تعادل', tagline:'بازسازی ترکیب بدن به سبک مدیترانه‌ای — کاهش پیوستهٔ چربی، حفظ عضله' }
+      }
+    },
+    mealSlotLabels:{ breakfast:'صبحانه —', lunch:'ناهار —', dinner:'شام —', snack:'میان‌وعده —' },
+    mealFoods:{
+      hpB1:'املت ۴ سفیده و ۱ زرده تخم‌مرغ، ۱ فنجان اسفناج، یک برش نان سبوس‌دار',
+      hpB2:'{p} گرم ماست یونانی، یک مشت توت‌فرنگی، ۱ قاشق غذاخوری دانه چیا',
+      hpB3:'تخم‌مرغ‌طعم توفو ({p} گرم توفو) با زردچوبه و فلفل دلمه‌ای، ¼ آووکادو',
+      hpL1:'{p} گرم سینهٔ مرغ گریل‌شده، سالاد بزرگ، ۱ قاشق غذاخوری روغن زیتون، نصف فنجان کینوای پخته',
+      hpL2:'{p} گرم ماهی کاد پخته، سبزیجات کبابی، نصف فنجان برنج قهوه‌ای پخته',
+      hpL3:'کاسهٔ توفو و ادامامه گریل‌شده ({p} گرم توفو)، نصف فنجان برنج قهوه‌ای، سس کنجد-سویا',
+      hpD1:'{p} گرم ماهی سالمون کبابی، ۱ فنجان بروکلی بخارپز، ۱۰۰ گرم سیب‌زمینی شیرین',
+      hpD2:'چیلی بوقلمون کم‌چرب ({p} گرم گوشت چرخ‌کردهٔ بوقلمون) با لوبیا، سالاد',
+      hpD3:'خورشت عدس و سبزیجات ({p} گرم عدس پخته)، برنج گل‌کلم',
+      hpS1:'{p} گرم ماست یونانی، یک مشت کوچک (۲۰ گرم) بادام',
+      hpS2:'شیک پروتئین وی ({p} گرم)، ۲ عدد نان برنجی',
+      hpS3:'۳ قاشق غذاخوری حمص، چوب‌های هویج و خیار',
+      mgB1:'{c} گرم جو دوسر خشک، ۱ اسکوپ (۳۰ گرم) پودر پروتئین وی، ۱ موز، ۱ قاشق غذاخوری کره بادام‌زمینی',
+      mgB2:'شکشوکا (۲ تخم‌مرغ پخته در سس گوجه و فلفل)، ۱ نان پیتای سبوس‌دار',
+      mgB3:'جو دوسر شبانه ({c} گرم) با شیر سویا، ۱ قاشق غذاخوری دانه چیا، توت‌های مخلوط',
+      mgL1:'{p} گرم مرغ، ۱ فنجان برنج پخته، سبزیجات کبابی، ¼ آووکادو',
+      mgL2:'سرخ‌کردهٔ {p} گرم گوشت گاو و سبزیجات، ۱ فنجان برنج پخته',
+      mgL3:'کاسهٔ نخود و سبزیجات با برنج ({p} گرم نخود)، سس ارده',
+      mgD1:'{p} گرم استیک گریل‌شده، سیب‌زمینی کبابی، لوبیا سبز',
+      mgD2:'{p} گرم سالمون تریاکی، ۱ فنجان برنج بخارپز، بوک چوی سرخ‌شده',
+      mgD3:'انچیلادای لوبیا سیاه و سیب‌زمینی شیرین (۲ تورتیلا)',
+      mgS1:'شیک پروتئین (۳۰ گرم وی + شیر)، ۳۰ گرم آجیل مخلوط',
+      mgS2:'{p} گرم پنیر کاتیج، نصف فنجان آناناس',
+      mgS3:'میوهٔ خشک، آجیل و شکلات تلخ (۴۰ گرم)',
+      baB1:'{p} گرم ماست یونانی، ۴۰ گرم جو دوسر، ۱۵ گرم گردو، یک مشت توت‌فرنگی',
+      baB2:'شکشوکا (۲ تخم‌مرغ)، ۱ نان سبوس‌دار',
+      baB3:'پودینگ دانه چیا (۳ قاشق غذاخوری چیا، شیر بادام)، انبه، تخمه کدو تنبل',
+      baL1:'ساندویچ مرغ گریل‌شده ({p} گرم مرغ، ۱ نان تورتیلای سبوس‌دار)، ۲ قاشق غذاخوری حمص، سبزیجات مخلوط',
+      baL2:'ساندویچ فلافل ({p} گرم فلافل، ۱ نان تورتیلای سبوس‌دار)، ۲ قاشق غذاخوری حمص، سبزیجات مخلوط',
+      baL3:'سالاد تن و لوبیا سفید ({p} گرم تن)، سس روغن زیتون و لیمو',
+      baD1:'{p} گرم ماهی سی‌باس کبابی، سبزیجات کبابی، ¾ فنجان برنج قهوه‌ای پخته',
+      baD2:'خورشت عدس و سبزیجات ({p} گرم عدس پخته)، ¾ فنجان برنج قهوه‌ای پخته',
+      baD3:'ران مرغ کبابی با ادویه‌جات ({p} گرم)، سبزیجات ریشه‌ای کبابی',
+      baS1:'۱ سیب متوسط، ۲۰ گرم بادام',
+      baS2:'۳ قاشق غذاخوری حمص، بیسکویت سبوس‌دار',
+      baS3:'۱ پرتقال، ۲ قاشق غذاخوری تخمه کدو تنبل'
+    }
+  }
+};
+
+let currentLang = 'en';
+let lastInputs = null;
+let lastExcludeKey = null;
+let lastDietPlans = null;
+let lastDietPrefs = null;
+
+function t(key){ return I18N[currentLang][key] ?? key; }
+
+function applyStaticTranslations(){
+  document.documentElement.lang = currentLang;
+  document.documentElement.dir = currentLang==='fa' ? 'rtl' : 'ltr';
+
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const key = el.getAttribute('data-i18n');
+    if(I18N[currentLang][key] !== undefined) el.textContent = I18N[currentLang][key];
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el=>{
+    const key = el.getAttribute('data-i18n-placeholder');
+    if(I18N[currentLang][key] !== undefined) el.setAttribute('placeholder', I18N[currentLang][key]);
+  });
+
+  document.querySelectorAll('.lang-btn').forEach(b=>{
+    b.classList.toggle('active', b.dataset.lang===currentLang);
+  });
+}
+
+function setLanguage(lang){
+  currentLang = lang;
+  applyStaticTranslations();
+  if(lastInputs){ renderReport(lastInputs); }
+  refreshHistoryList();
+}
+
+document.querySelectorAll('.lang-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=> setLanguage(btn.dataset.lang));
+});
+
+/* ============================================================
+   MATH HELPERS
+   ============================================================ */
+function lerp(v, x0, x1, y0, y1){
+  if(x1===x0) return y0;
+  const tt = (v-x0)/(x1-x0);
+  const val = y0 + tt*(y1-y0);
+  return Math.max(Math.min(val, Math.max(y0,y1)), Math.min(y0,y1));
+}
+function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
+
+function scoreFat(v, r){
+  const essMin=r.essential[0], athMin=r.athletic[0], accMin=r.acceptable[0], obMin=r.obeseMin;
+  let score;
+  if(v < essMin - 8) score = 30;
+  else if(v < essMin) score = lerp(v, essMin-8, essMin, 30, 70);
+  else if(v < athMin) score = lerp(v, essMin, athMin, 70, 100);
+  else if(v < accMin) score = lerp(v, athMin, accMin, 100, 85);
+  else if(v < obMin)  score = lerp(v, accMin, obMin, 85, 50);
+  else if(v < obMin+15) score = lerp(v, obMin, obMin+15, 50, 5);
+  else score = 5;
+  return clamp(Math.round(score),0,100);
+}
+function scoreWater(v, r){
+  const [lo,hi]=r;
+  let score;
+  if(v < lo-15) score = 5;
+  else if(v < lo) score = lerp(v, lo-15, lo, 5, 55);
+  else if(v <= hi) score = lerp(v, lo, hi, 55, 100);
+  else if(v <= hi+10) score = lerp(v, hi, hi+10, 100, 92);
+  else score = 90;
+  return clamp(Math.round(score),0,100);
+}
+function scoreMuscle(v, r){
+  const [lo,hi]=r;
+  let score;
+  if(v < lo-12) score = 5;
+  else if(v < lo) score = lerp(v, lo-12, lo, 5, 55);
+  else if(v <= hi) score = lerp(v, lo, hi, 55, 92);
+  else if(v <= hi+10) score = lerp(v, hi, hi+10, 92, 100);
+  else score = 100;
+  return clamp(Math.round(score),0,100);
+}
+
+function zoneNameFat(v,r){
+  if(v < r.essential[0]) return {label:t('zBelowEssential'), tone:'red'};
+  if(v <= r.essential[1]) return {label:t('zEssential'), tone:'amber'};
+  if(v <= r.athletic[1]) return {label:t('zAthletic'), tone:'teal'};
+  if(v <= r.acceptable[1]) return {label:t('zAcceptable'), tone:'amber'};
+  return {label:t('zAboveHealthy'), tone:'red'};
+}
+function zoneNameWater(v,r){
+  if(v < r[0]) return {label:t('zBelowRange'), tone:'amber'};
+  if(v <= r[1]) return {label:t('zInRange'), tone:'teal'};
+  return {label:t('zAboveRange'), tone:'teal'};
+}
+function zoneNameMuscle(v,r){
+  if(v < r[0]) return {label:t('zLow'), tone:'amber'};
+  if(v <= r[1]) return {label:t('zNormal'), tone:'teal'};
+  return {label:t('zHigh'), tone:'teal'};
+}
+
+const TONE_COLORS = {
+  teal:{bg:'#127A6E', pale:'#DCEFEC', text:'#0B5A51'},
+  amber:{bg:'#C9622A', pale:'#F7E4D6', text:'#9C4A1F'},
+  red:{bg:'#B33A3A', pale:'#F3DADA', text:'#8F2E2E'}
+};
+
+/* ============================================================
+   GAUGE RENDERING
+   ============================================================ */
+function buildFatGauge(v, r){
+  const domainMin = Math.max(0, r.essential[0]-8);
+  const domainMax = r.obeseMin+15;
+  const segs = [
+    {from:domainMin, to:r.essential[0], color:'#E2A6A6'},
+    {from:r.essential[0], to:r.athletic[0], color:'#F0C9A0'},
+    {from:r.athletic[0], to:r.acceptable[0], color:'#8FCFC5'},
+    {from:r.acceptable[0], to:r.obeseMin, color:'#F0C9A0'},
+    {from:r.obeseMin, to:domainMax, color:'#E2A6A6'}
+  ];
+  return {domainMin, domainMax, segs};
+}
+function buildSimpleGauge(lo, hi, padLo, padHi){
+  const domainMin = lo-padLo, domainMax = hi+padHi;
+  const segs = [
+    {from:domainMin, to:lo, color:'#F0C9A0'},
+    {from:lo, to:hi, color:'#8FCFC5'},
+    {from:hi, to:domainMax, color:'#BFE0DA'}
+  ];
+  return {domainMin, domainMax, segs};
+}
+
+function renderGauges(data){
+  const wrap = document.getElementById('gauges');
+  wrap.innerHTML = '';
+
+  const items = [
+    {
+      key:'fat', name:t('gaugeFat'), unit: currentLang==='fa'?'٪':'%', value:data.fat,
+      gauge: buildFatGauge(data.fat, data.fatRange),
+      zone: zoneNameFat(data.fat, data.fatRange),
+      score: data.fatScore,
+      rangeText: `${t('zAthletic')} ${data.fatRange.athletic[0]}–${data.fatRange.athletic[1]}% · ${t('zAcceptable')} ${data.fatRange.acceptable[0]}–${data.fatRange.acceptable[1]}%`
+    },
+    {
+      key:'water', name:t('gaugeWater'), unit: currentLang==='fa'?'٪':'%', value:data.water,
+      gauge: buildSimpleGauge(data.waterRange[0], data.waterRange[1], 12, 10),
+      zone: zoneNameWater(data.water, data.waterRange),
+      score: data.waterScore,
+      rangeText: `${t('healthyRange')} ${data.waterRange[0]}–${data.waterRange[1]}%`
+    },
+    {
+      key:'muscle', name:t('gaugeMuscle'), unit: currentLang==='fa'?'٪':'%', value:data.muscle,
+      gauge: buildSimpleGauge(data.muscleRange[0], data.muscleRange[1], 10, 10),
+      zone: zoneNameMuscle(data.muscle, data.muscleRange),
+      score: data.muscleScore,
+      rangeText: `${t('normalRange')} ${data.muscleRange[0]}–${data.muscleRange[1]}%`
+    },
+    {
+      key:'bmi', name:t('gaugeBMI'), unit:'', value:data.bmi,
+      gauge: buildSimpleGauge(18.5, 24.9, 6, 10),
+      zone: {label: data.bmiCategoryKey==='bmiNormal' ? t('bmiNormal') : t(data.bmiCategoryKey), tone: data.bmiCategoryKey==='bmiNormal' ? 'teal' : 'amber'},
+      score: null,
+      rangeText: t('whoRange')
+    }
+  ];
+
+  items.forEach(it=>{
+    const tone = TONE_COLORS[it.zone.tone];
+    const g = it.gauge;
+    const pos = clamp((it.value - g.domainMin)/(g.domainMax-g.domainMin)*100, 0, 100);
+
+    const segHtml = g.segs.map(s=>{
+      const w = (Math.max(0,(Math.min(s.to,g.domainMax)-Math.max(s.from,g.domainMin)))/(g.domainMax-g.domainMin))*100;
+      return `<div class="gauge-seg" style="width:${w}%; background:${s.color}"></div>`;
+    }).join('');
+
+    const el = document.createElement('div');
+    el.className='gauge';
+    el.innerHTML = `
+      <div class="gauge-top">
+        <span class="name">${it.name}</span>
+        <span class="value">${it.value}${it.unit}</span>
+      </div>
+      <div class="gauge-zone-label">${it.rangeText}</div>
+      <div class="gauge-track">${segHtml}
+        <div class="gauge-marker-line" style="left:${pos}%"></div>
+        <div class="gauge-marker" style="left:${pos}%"></div>
+      </div>
+      <div class="gauge-range-labels"><span>${g.domainMin.toFixed(1)}</span><span>${g.domainMax.toFixed(1)}</span></div>
+      <div class="gauge-footer">
+        <span class="zone-pill" style="background:${tone.pale}; color:${tone.text}">${it.zone.label}</span>
+        ${it.score!==null ? `<span class="sub-score">${t('subScore')} ${it.score}</span>` : `<span class="sub-score">${t('contextOnly')}</span>`}
+      </div>
+    `;
+    wrap.appendChild(el);
+  });
+
+  if(data.bone !== null && !isNaN(data.bone)){
+    const el = document.createElement('div');
+    el.className='gauge';
+    el.innerHTML = `
+      <div class="gauge-top"><span class="name">${t('gaugeBone')}</span><span class="value">${data.bone} kg</span></div>
+      <div class="gauge-zone-label">${t('boneNote')}</div>
+      <div class="gauge-footer"><span class="zone-pill" style="background:#E8EAEA;color:#5B6B75">${t('notScored')}</span></div>
+    `;
+    wrap.appendChild(el);
+  }
+}
+
+function renderReferenceDetails(data){
+  const heightM = data.height/100;
+  const items = [
+    {
+      title: t('gaugeBMI'),
+      calc: `${t('bmiCalcLabel')} <b>${data.weight}</b> kg ÷ (<b>${heightM.toFixed(2)}</b> m)² = <b>${data.bmi}</b>`,
+      caveat: t('bmiCaveat')
+    },
+    { title: t('gaugeFat'), calc: null, caveat: t('fatCaveat') },
+    { title: t('gaugeWater'), calc: null, caveat: t('waterCaveat') },
+    { title: t('gaugeMuscle'), calc: null, caveat: t('muscleCaveat') }
+  ];
+  document.getElementById('referenceDetailsBody').innerHTML = items.map(it => `
+    <div class="ref-detail-item">
+      <div class="rd-title">${it.title}</div>
+      ${it.calc ? `<div class="gauge-calc">${it.calc}</div>` : ''}
+      <div class="gauge-caveat">${it.caveat}</div>
+    </div>
+  `).join('');
+}
+
+/* ============================================================
+   SCATTER / BUILD-CLASSIFICATION CHART
+   ============================================================ */
+function drawScatter(canvasEl, data){
+  const W = 640, H = 460;         // logical (CSS-pixel) drawing space — kept fixed
+  const dpr = Math.max(2, window.devicePixelRatio || 1);
+  canvasEl.width = W*dpr;
+  canvasEl.height = H*dpr;
+  canvasEl.style.width = W+'px';
+  canvasEl.style.height = H+'px';
+
+  const ctx = canvasEl.getContext('2d');
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.scale(dpr,dpr);
+  ctx.direction = currentLang==='fa' ? 'rtl' : 'ltr';
+  ctx.clearRect(0,0,W,H);
+
+  const isFa = currentLang==='fa';
+  const zoneFont   = isFa ? "600 13px Vazirmatn, sans-serif" : "600 11.5px 'IBM Plex Mono', sans-serif";
+  const zoneLine   = isFa ? 16 : 14;
+  const tickFont   = isFa ? "12px Vazirmatn, sans-serif" : "11px 'IBM Plex Mono', monospace";
+  const axisFont   = isFa ? "700 14px Vazirmatn, sans-serif" : "700 12.5px 'Space Grotesk', sans-serif";
+
+  const padL=62, padR=22, padT=22, padB=52;
+  const plotW = W-padL-padR, plotH = H-padT-padB;
+
+  const bmiMin=15, bmiMax=38;
+  const fatMax = data.sex==='male' ? 38 : 48;
+  const fatMin = 0;
+
+  function X(bmi){return padL + (bmi-bmiMin)/(bmiMax-bmiMin)*plotW;}
+  function Y(fat){return padT + (1-(fat-fatMin)/(fatMax-fatMin))*plotH;}
+
+  const athMax = data.fatRange.athletic[1];
+  const accMax = data.fatRange.acceptable[1];
+  const bmiLo=18.5, bmiHi=25, bmiObese=30;
+
+  const bmiBands = [[bmiMin,bmiLo],[bmiLo,bmiHi],[bmiHi,bmiObese],[bmiObese,bmiMax]];
+  const fatBands = [[fatMin,athMax],[athMax,accMax],[accMax,fatMax]];
+
+  function zoneColor(bIdx,fIdx){
+    if(fIdx===0){
+      if(bIdx===0) return '#EDEEEC';
+      if(bIdx===1) return '#CDEAE3';
+      if(bIdx===2) return '#BFE0DA';
+      return '#AFDCD3';
+    }
+    if(fIdx===1){
+      if(bIdx===0) return '#EDEEEC';
+      if(bIdx===1) return '#E5EFE8';
+      if(bIdx===2) return '#F7E4D6';
+      return '#F3DADA';
+    }
+    if(bIdx===0) return '#F0DCC8';
+    if(bIdx===1) return '#F7E4D6';
+    if(bIdx===2) return '#F3DADA';
+    return '#EAC5C5';
+  }
+  const cz = I18N[currentLang].chartZones;
+  const zoneLabelFor = (bIdx,fIdx)=>{
+    const labels = [
+      [cz.slim, cz.slimUnder, cz.underHighFat],
+      [cz.athletic, cz.fitHealthy, cz.skinnyFat],
+      [cz.muscular, cz.overweightBuild, cz.overweight],
+      [cz.muscularHeavy, cz.obeseMuscular, cz.obese]
+    ];
+    return labels[bIdx][fIdx];
+  };
+
+  bmiBands.forEach((bb,bIdx)=>{
+    fatBands.forEach((fb,fIdx)=>{
+      const x0=X(bb[0]), x1=X(bb[1]);
+      const y0=Y(fb[1]), y1=Y(fb[0]);
+      ctx.fillStyle = zoneColor(bIdx,fIdx);
+      ctx.fillRect(x0,y0,x1-x0,y1-y0);
+      ctx.save();
+      ctx.fillStyle='rgba(15,36,56,0.8)';
+      ctx.font=zoneFont;
+      ctx.textAlign='center';
+      const lbl = zoneLabelFor(bIdx,fIdx);
+      const cx=(x0+x1)/2, cy=(y0+y1)/2;
+      wrapText(ctx,lbl,cx,cy,(x1-x0)-10,zoneLine);
+      ctx.restore();
+    });
+  });
+
+  ctx.strokeStyle='#B9C2C6';
+  ctx.lineWidth=1;
+  [bmiLo,bmiHi,bmiObese].forEach(b=>{
+    ctx.beginPath(); ctx.moveTo(X(b),padT); ctx.lineTo(X(b),padT+plotH); ctx.stroke();
+  });
+  [athMax,accMax].forEach(f=>{
+    ctx.beginPath(); ctx.moveTo(padL,Y(f)); ctx.lineTo(padL+plotW,Y(f)); ctx.stroke();
+  });
+
+  ctx.strokeStyle='#0F2438';
+  ctx.lineWidth=1.4;
+  ctx.strokeRect(padL,padT,plotW,plotH);
+
+  ctx.fillStyle='#3E5266';
+  ctx.font=tickFont;
+  ctx.textAlign='center';
+  [16,18.5,25,30,35].forEach(b=>{
+    if(b<bmiMin||b>bmiMax) return;
+    ctx.fillText(b.toString(), X(b), padT+plotH+18);
+  });
+  ctx.font=axisFont;
+  ctx.fillStyle='#0F2438';
+  ctx.fillText(I18N[currentLang].axisBMI, padL+plotW/2, padT+plotH+38);
+
+  ctx.save();
+  ctx.translate(18, padT+plotH/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center';
+  ctx.font=axisFont;
+  ctx.fillStyle='#0F2438';
+  ctx.fillText(I18N[currentLang].axisFat, 0, 0);
+  ctx.restore();
+
+  ctx.font=tickFont;
+  ctx.fillStyle='#3E5266';
+  ctx.textAlign='right';
+  const fatTicks = data.sex==='male' ? [0,10,20,30,fatMax] : [0,15,30,45];
+  fatTicks.forEach(f=>{
+    ctx.fillText(f.toString(), padL-10, Y(f)+4);
+  });
+
+  const cx = X(data.bmi), cy = Y(clamp(data.fat,fatMin,fatMax));
+  const tx = X(data.targetBmi), ty = Y(clamp(data.targetFat,fatMin,fatMax));
+
+  if(Math.abs(cx-tx)>2 || Math.abs(cy-ty)>2){
+    ctx.setLineDash([4,3]);
+    ctx.strokeStyle='#127A6E';
+    ctx.lineWidth=1.8;
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(tx,ty); ctx.stroke();
+    ctx.setLineDash([]);
+    const ang = Math.atan2(ty-cy, tx-cx);
+    ctx.beginPath();
+    ctx.moveTo(tx,ty);
+    ctx.lineTo(tx-9*Math.cos(ang-0.4), ty-9*Math.sin(ang-0.4));
+    ctx.lineTo(tx-9*Math.cos(ang+0.4), ty-9*Math.sin(ang+0.4));
+    ctx.closePath();
+    ctx.fillStyle='#127A6E';
+    ctx.fill();
+  }
+
+  ctx.beginPath();
+  ctx.arc(tx,ty,7.5,0,Math.PI*2);
+  ctx.fillStyle='#FFFFFF';
+  ctx.fill();
+  ctx.lineWidth=2.4;
+  ctx.strokeStyle='#127A6E';
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(cx,cy,7.5,0,Math.PI*2);
+  ctx.fillStyle='#0F2438';
+  ctx.fill();
+  ctx.lineWidth=2.2;
+  ctx.strokeStyle='#fff';
+  ctx.stroke();
+}
+
+function wrapText(ctx,text,x,y,maxWidth,lineHeight){
+  const words = text.split(' ');
+  let line='', lines=[];
+  for(let n=0;n<words.length;n++){
+    const test = line + words[n] + ' ';
+    if(ctx.measureText(test).width > maxWidth && n>0){
+      lines.push(line); line = words[n]+' ';
+    } else { line = test; }
+  }
+  lines.push(line);
+  const startY = y - ((lines.length-1)*lineHeight)/2;
+  lines.forEach((l,i)=> ctx.fillText(l.trim(), x, startY + i*lineHeight));
+}
+
+/* ============================================================
+   MAIN COMPUTE + RENDER
+   ============================================================ */
+function computeAll(inputs){
+  const {sex, age, height, weight, fat, water, muscle, bone, activity, dietPattern, cuisine, avoid} = inputs;
+  const bmi = weight/((height/100)**2);
+  let bmiCategoryKey='bmiNormal';
+  if(bmi<18.5) bmiCategoryKey='bmiUnder';
+  else if(bmi<25) bmiCategoryKey='bmiNormal';
+  else if(bmi<30) bmiCategoryKey='bmiOver';
+  else bmiCategoryKey='bmiObese';
+
+  const fatRange = FAT_RANGES[sex][ageBand5(age)];
+  const waterRange = WATER_RANGES[sex][waterBand(age)];
+  const muscleRange = MUSCLE_RANGES[sex][muscleBand(age)];
+
+  const fatScore = scoreFat(fat, fatRange);
+  const waterScore = scoreWater(water, waterRange);
+  const muscleScore = scoreMuscle(muscle, muscleRange);
+
+  const total = Math.round(fatScore*0.40 + muscleScore*0.30 + waterScore*0.30);
+
+  const targetFat = fat > fatRange.athletic[1] ? fatRange.athletic[1] : Math.max(fat, fatRange.essential[1]);
+  let targetBmi = bmi;
+  if(bmi > 27) targetBmi = 25;
+  else if(bmi < 18.5) targetBmi = 19.5;
+
+  return {
+    sex, age, height, weight, fat, water, muscle, bone: bone===null? null : bone,
+    activity: activity || 'moderate',
+    dietPattern: dietPattern || 'omnivore', cuisine: cuisine || 'any', avoid: avoid || [],
+    bmi: Math.round(bmi*10)/10, bmiCategoryKey,
+    fatRange, waterRange, muscleRange,
+    fatScore, waterScore, muscleScore, total,
+    targetFat: Math.round(targetFat*10)/10, targetBmi
+  };
+}
+
+const ACTIVITY_MULT = {
+  sedentary:1.2, light:1.375, moderate:1.55, active:1.725, veryActive:1.9
+};
+
+/* Mifflin-St Jeor BMR — current standard equation for resting energy
+   expenditure, then scaled to an activity multiplier for TDEE. */
+function calcBMR(sex, age, height, weight){
+  return sex==='male'
+    ? 10*weight + 6.25*height - 5*age + 5
+    : 10*weight + 6.25*height - 5*age - 161;
+}
+
+/* Decision tree + magnitudes drawn from:
+   - ISSN Position Stand: Protein & Exercise (2017) and Diets & Body
+     Composition (2017) as general background — this app uses a flat,
+     more conservative 1.0-1.8 g/kg target band across all goals
+     (weighted toward the top of that band during a cut or lean gain,
+     the bottom when simply maintaining) rather than ISSN's higher
+     upper bound for hypocaloric/contest-prep populations.
+   - NHLBI/NIH obesity clinical guidelines — 500-1000 kcal/day deficit,
+     targeting ~0.5-1 kg/week of loss; ISSN caps deficits near 500 kcal/day
+     for already-lean individuals to protect lean mass.
+   - Iraki, Fitschen, Espinar & Helms (2019) natural bodybuilding nutrition
+     review — 200-300 kcal/day (~10-15% TDEE) surplus maximizes muscle-to-fat
+     gain ratio; larger surpluses mainly add fat (Slater et al., 2019).
+   - EFSA Dietary Reference Values for Water (2010) — 2.5 L/d (men) / 2.0 L/d
+     (women) baseline adequate intake; practical sports-nutrition scaling of
+     ~30-35 ml/kg bodyweight/day is used here to personalize that baseline.
+   - IOM dietary fibre heuristic — ~14 g fibre per 1000 kcal consumed. */
+function computeNutrition(d){
+  const bmr = calcBMR(d.sex, d.age, d.height, d.weight);
+  const tdee = bmr * (ACTIVITY_MULT[d.activity] || ACTIVITY_MULT.moderate);
+
+  const essentialMax = d.fatRange.essential[1];
+  const athleticMax = d.fatRange.athletic[1];
+  const acceptableMax = d.fatRange.acceptable[1];
+
+  let goalKey, calTarget, proteinLow, proteinHigh, rateLowKgWk, rateHighKgWk, deltaKcal;
+
+  if(d.fat <= essentialMax){
+    // Already at/below the essential-fat threshold: do not recommend
+    // further restriction — that range carries real health risk.
+    goalKey = 'maintainCaution';
+    calTarget = tdee;
+    deltaKcal = 0;
+    proteinLow = 1.0; proteinHigh = 1.8;
+    rateLowKgWk = 0; rateHighKgWk = 0;
+  } else if(d.fat > acceptableMax){
+    goalKey = 'fatLossHigh';
+    deltaKcal = -clamp(tdee*0.25, 500, 1000);
+    calTarget = tdee + deltaKcal;
+    proteinLow = 1.0; proteinHigh = 1.8;
+    rateLowKgWk = d.weight*0.005; rateHighKgWk = d.weight*0.010;
+  } else if(d.fat > athleticMax){
+    goalKey = 'fatLossModerate';
+    deltaKcal = -clamp(tdee*0.20, 400, 500);
+    calTarget = tdee + deltaKcal;
+    proteinLow = 1.0; proteinHigh = 1.8;
+    rateLowKgWk = d.weight*0.004; rateHighKgWk = d.weight*0.0075;
+  } else if(d.muscle < d.muscleRange[0]){
+    goalKey = 'muscleGain';
+    deltaKcal = clamp(tdee*0.125, 200, 300);
+    calTarget = tdee + deltaKcal;
+    proteinLow = 1.0; proteinHigh = 1.8;
+    rateLowKgWk = d.weight*0.0025; rateHighKgWk = d.weight*0.005;
+  } else {
+    goalKey = 'recomp';
+    deltaKcal = -clamp(tdee*0.10, 150, 350);
+    calTarget = tdee + deltaKcal;
+    proteinLow = 1.0; proteinHigh = 1.8;
+    rateLowKgWk = 0; rateHighKgWk = d.weight*0.0025;
+  }
+
+  const waterLow = d.weight*0.030, waterHigh = d.weight*0.035;
+  const fiber = Math.round(tdee/1000*14);
+
+  return {
+    bmr: Math.round(bmr), tdee: Math.round(tdee),
+    goalKey, deltaKcal: Math.round(deltaKcal/10)*10,
+    calTarget: Math.round(calTarget/10)*10,
+    proteinLow, proteinHigh,
+    proteinLowG: Math.round(d.weight*proteinLow), proteinHighG: Math.round(d.weight*proteinHigh),
+    waterLow: Math.round(waterLow*10)/10, waterHigh: Math.round(waterHigh*10)/10,
+    fiber,
+    rateLowKgWk: Math.round(rateLowKgWk*100)/100, rateHighKgWk: Math.round(rateHighKgWk*100)/100
+  };
+}
+
+function gradeFor(score){
+  if(score>=90) return {g:t('grades').excellent, c:'#127A6E'};
+  if(score>=78) return {g:t('grades').good, c:'#127A6E'};
+  if(score>=62) return {g:t('grades').fair, c:'#C9622A'};
+  if(score>=45) return {g:t('grades').needsWork, c:'#C9622A'};
+  return {g:t('grades').priority, c:'#B33A3A'};
+}
+
+function buildSummary(d){
+  const fatZone = zoneNameFat(d.fat, d.fatRange).label;
+  const waterZone = zoneNameWater(d.water, d.waterRange).label;
+  const muscleZone = zoneNameMuscle(d.muscle, d.muscleRange).label;
+  const pct = currentLang==='fa' ? '%' : '%';
+
+  if(currentLang==='fa'){
+    let p1 = `<b>${d.total} از 100.</b> درصد چربی بدن در محدوده «${fatZone}» و برابر ${d.fat}${pct} است `+
+      `(محدوده مرجع بر اساس سن و جنسیت: ${d.fatRange.athletic[0]}–${d.fatRange.athletic[1]}${pct} ورزشکاری، ${d.fatRange.acceptable[0]}–${d.fatRange.acceptable[1]}${pct} قابل‌قبول). `+
+      `میزان آب بدن «${waterZone}» و برابر ${d.water}${pct} است (محدوده مرجع: ${d.waterRange[0]}–${d.waterRange[1]}${pct}) و عضله اسکلتی «${muscleZone}» و برابر ${d.muscle}${pct} است (محدوده مرجع: ${d.muscleRange[0]}–${d.muscleRange[1]}${pct}).`;
+    let p2;
+    if(d.fat > d.fatRange.athletic[1]){
+      const delta = Math.round((d.fat - d.fatRange.athletic[1])*10)/10;
+      p2 = `کاهش حدود ${delta} واحد از چربی بدن، مراجع را از محدوده «${fatZone}» به محدوده «ورزشکاری / آماده» منتقل می‌کند؛ این مؤثرترین تغییر برای بهبود امتیاز کل است.`;
+    } else {
+      p2 = `درصد چربی بدن هم‌اکنون در محدوده ورزشکاری/آماده یا پایین‌تر از آن قرار دارد؛ تمرکز بر حفظ وضعیت و افزایش عضله تأثیر بیشتری بر امتیاز خواهد داشت تا کاهش بیشتر چربی.`;
+    }
+    return p1 + '<br><br>' + p2;
+  }
+
+  let p1 = `<b>${d.total}/100.</b> Body fat is ${fatZone.toLowerCase()} at ${d.fat}% (age/sex reference: ${d.fatRange.athletic[0]}–${d.fatRange.athletic[1]}% athletic, ${d.fatRange.acceptable[0]}–${d.fatRange.acceptable[1]}% acceptable). `;
+  p1 += `Hydration is ${waterZone.toLowerCase()} at ${d.water}% (ref. ${d.waterRange[0]}–${d.waterRange[1]}%), and skeletal muscle is ${muscleZone.toLowerCase()} at ${d.muscle}% (ref. ${d.muscleRange[0]}–${d.muscleRange[1]}%).`;
+  let p2;
+  if(d.fat > d.fatRange.athletic[1]){
+    const delta = Math.round((d.fat - d.fatRange.athletic[1])*10)/10;
+    p2 = `Reducing body fat by roughly ${delta} point${delta===1?'':'s'} would move the client from the ${fatZone} band into the Athletic/Fit band, the single highest-leverage change for the composite score.`;
+  } else {
+    p2 = `Body fat is already at or below the top of the Athletic/Fit band — maintenance and muscle-focused work will do more for the score than further fat loss.`;
+  }
+  return p1 + '<br><br>' + p2;
+}
+
+function renderNutrition(d){
+  const n = computeNutrition(d);
+  const NT = I18N[currentLang].nutrition;
+
+  const banner = document.getElementById('nutriGoalBanner');
+  banner.textContent = NT.goalLabel[n.goalKey];
+  banner.style.background = n.goalKey==='maintainCaution' ? 'var(--red-pale)' : 'var(--teal-pale)';
+  banner.style.color = n.goalKey==='maintainCaution' ? 'var(--red)' : 'var(--teal-deep)';
+
+  const deltaSign = n.deltaKcal > 0 ? '+' : (n.deltaKcal < 0 ? '' : '±');
+  const deltaText = n.deltaKcal===0 ? NT.maintenanceWord : `${deltaSign}${n.deltaKcal} kcal`;
+
+  const rateText = (n.rateLowKgWk===0 && n.rateHighKgWk===0)
+    ? NT.rateNA
+    : `${n.rateLowKgWk}–${n.rateHighKgWk} kg/${NT.perWeek}`;
+
+  const cards = [
+    {label: NT.cardTdee, value: `${n.tdee}`, sub: NT.kcalPerDay},
+    {label: NT.cardTarget, value: `${n.calTarget}`, sub: `${deltaText} · ${NT.kcalPerDay}`},
+    {label: NT.cardProtein, value: `${n.proteinLowG}–${n.proteinHighG} g`, sub: `${n.proteinLow}–${n.proteinHigh} g/kg`},
+    {label: NT.cardWater, value: `${n.waterLow}–${n.waterHigh} L`, sub: NT.perDay},
+    {label: NT.cardPace, value: rateText, sub: NT.cardFiberSub.replace('{f}', n.fiber)}
+  ];
+
+  document.getElementById('nutriGrid').innerHTML = cards.map(c => `
+    <div class="nutri-card">
+      <div class="nc-label">${c.label}</div>
+      <div class="nc-value">${c.value}</div>
+      <div class="nc-sub">${c.sub}</div>
+    </div>
+  `).join('');
+
+  const rationaleEl = document.getElementById('nutriRationale');
+  rationaleEl.className = n.goalKey==='maintainCaution' ? 'nutri-caution' : 'nutri-rationale';
+  rationaleEl.innerHTML = NT.rationale[n.goalKey];
+
+  document.getElementById('nutriSources').textContent = NT.sources;
+}
+
+/* ============================================================
+   DIET PLAN CARDS
+   ============================================================ */
+const MACRO_COLORS = {protein:'#127A6E', carb:'#C9622A', fat:'#6B7FB3'};
+
+/* Protein is now computed directly from bodyweight (1.0-1.8 g/kg target
+   band — see computeNutrition above) rather than as a fixed % of
+   calories, so it always lands inside that band regardless of the
+   client's TDEE. Remaining calories split into carbs/fat per plan. */
+const DIET_PLAN_DEFS = [
+  {key:'highProtein', icon:'🔥', proteinPerKg:1.8, carbFatSplit:{c:0.55,f:0.45}, calFn:(tdee)=> tdee - clamp(tdee*0.22,400,750)},
+  {key:'muscleGain',  icon:'💪', proteinPerKg:1.6, carbFatSplit:{c:0.65,f:0.35}, calFn:(tdee)=> tdee + clamp(tdee*0.125,200,300)},
+  {key:'balanced',    icon:'🥗', proteinPerKg:1.4, carbFatSplit:{c:0.60,f:0.40}, calFn:(tdee)=> tdee - clamp(tdee*0.08,100,250)}
+];
+
+/* Each slot offers 3 tagged options so the plan can adapt to a client's
+   eating pattern, avoid-list, and cuisine preference instead of showing
+   the same fixed meal to everyone. `contains` drives the dietary-pattern
+   and avoid-list filtering; `cuisine` is a soft preference, not a hard
+   filter (a plan never goes empty just because nothing matches the
+   requested cuisine). Food text itself lives in I18N (mealFoods) so it
+   can be translated — this table only carries the language-neutral
+   filtering data. */
+const MEAL_LIBRARY = {
+  highProtein: {
+    breakfast: [
+      {id:'hpB1', icon:'🍳', contains:['egg','gluten'], cuisine:'american'},
+      {id:'hpB2', icon:'🥣', contains:['dairy'], cuisine:'mediterranean'},
+      {id:'hpB3', icon:'🌯', contains:[], cuisine:'american'}
+    ],
+    lunch: [
+      {id:'hpL1', icon:'🥗', contains:['poultry'], cuisine:'mediterranean'},
+      {id:'hpL2', icon:'🐟', contains:['fish'], cuisine:'mediterranean'},
+      {id:'hpL3', icon:'🥙', contains:[], cuisine:'asian'}
+    ],
+    dinner: [
+      {id:'hpD1', icon:'🐟', contains:['fish'], cuisine:'american'},
+      {id:'hpD2', icon:'🌶️', contains:['poultry'], cuisine:'american'},
+      {id:'hpD3', icon:'🍛', contains:[], cuisine:'asian'}
+    ],
+    snack: [
+      {id:'hpS1', icon:'🥤', contains:['dairy','nuts'], cuisine:'mediterranean'},
+      {id:'hpS2', icon:'🍚', contains:['dairy'], cuisine:'american'},
+      {id:'hpS3', icon:'🥕', contains:[], cuisine:'middleEastern'}
+    ]
+  },
+  muscleGain: {
+    breakfast: [
+      {id:'mgB1', icon:'🥣', contains:['dairy','nuts'], cuisine:'american'},
+      {id:'mgB2', icon:'🍳', contains:['egg','gluten'], cuisine:'middleEastern'},
+      {id:'mgB3', icon:'🥣', contains:[], cuisine:'american'}
+    ],
+    lunch: [
+      {id:'mgL1', icon:'🍗', contains:['poultry'], cuisine:'asian'},
+      {id:'mgL2', icon:'🥩', contains:['redMeat'], cuisine:'asian'},
+      {id:'mgL3', icon:'🥙', contains:[], cuisine:'middleEastern'}
+    ],
+    dinner: [
+      {id:'mgD1', icon:'🥩', contains:['redMeat'], cuisine:'american'},
+      {id:'mgD2', icon:'🍣', contains:['fish'], cuisine:'asian'},
+      {id:'mgD3', icon:'🌯', contains:['gluten'], cuisine:'latinAmerican'}
+    ],
+    snack: [
+      {id:'mgS1', icon:'🥤', contains:['dairy','nuts'], cuisine:'american'},
+      {id:'mgS2', icon:'🍍', contains:['dairy'], cuisine:'american'},
+      {id:'mgS3', icon:'🥜', contains:['nuts'], cuisine:'general'}
+    ]
+  },
+  balanced: {
+    breakfast: [
+      {id:'baB1', icon:'🥣', contains:['dairy','nuts'], cuisine:'mediterranean'},
+      {id:'baB2', icon:'🍳', contains:['egg','gluten'], cuisine:'middleEastern'},
+      {id:'baB3', icon:'🍮', contains:['nuts'], cuisine:'general'}
+    ],
+    lunch: [
+      {id:'baL1', icon:'🌯', contains:['poultry','gluten'], cuisine:'middleEastern'},
+      {id:'baL2', icon:'🧆', contains:['gluten'], cuisine:'middleEastern'},
+      {id:'baL3', icon:'🥗', contains:['fish'], cuisine:'mediterranean'}
+    ],
+    dinner: [
+      {id:'baD1', icon:'🐟', contains:['fish'], cuisine:'mediterranean'},
+      {id:'baD2', icon:'🍲', contains:[], cuisine:'mediterranean'},
+      {id:'baD3', icon:'🍗', contains:['poultry'], cuisine:'mediterranean'}
+    ],
+    snack: [
+      {id:'baS1', icon:'🍎', contains:['nuts'], cuisine:'general'},
+      {id:'baS2', icon:'🧆', contains:['gluten'], cuisine:'middleEastern'},
+      {id:'baS3', icon:'🍊', contains:[], cuisine:'general'}
+    ]
+  }
+};
+const MEAL_SLOTS = ['breakfast','lunch','dinner','snack'];
+const VEG_EXCLUDE = ['poultry','redMeat','pork','fish','shellfish'];
+const VEGAN_EXCLUDE = VEG_EXCLUDE.concat(['dairy','egg']);
+const PESC_EXCLUDE = ['poultry','redMeat','pork'];
+
+/* Portion accuracy: several meals show a primary protein- or carb-source
+   quantity as a {p}/{c} placeholder in their I18N text. This maps each
+   such meal to which macro it represents, an approximate g-per-100g
+   density for that food, and which meal slot it is (so it only draws on
+   a sensible share of the day's target) — so the displayed portion
+   actually scales with THIS client's computed macro targets instead of
+   showing the same fixed gram figure to every client on every plan. */
+const MEAL_SLOT_FRACTION = {breakfast:0.20, lunch:0.35, dinner:0.35, snack:0.10};
+const MEAL_SCALE_INFO = {
+  hpB2:{slot:'breakfast', density:10, type:'p'}, hpB3:{slot:'breakfast', density:8, type:'p'},
+  hpL1:{slot:'lunch', density:31, type:'p'}, hpL2:{slot:'lunch', density:23, type:'p'}, hpL3:{slot:'lunch', density:8, type:'p'},
+  hpD1:{slot:'dinner', density:25, type:'p'}, hpD2:{slot:'dinner', density:27, type:'p'}, hpD3:{slot:'dinner', density:9, type:'p'},
+  hpS1:{slot:'snack', density:10, type:'p'}, hpS2:{slot:'snack', density:80, type:'p'},
+  mgB1:{slot:'breakfast', density:68, type:'c'}, mgB3:{slot:'breakfast', density:68, type:'c'},
+  mgL1:{slot:'lunch', density:31, type:'p'}, mgL2:{slot:'lunch', density:26, type:'p'}, mgL3:{slot:'lunch', density:9, type:'p'},
+  mgD1:{slot:'dinner', density:26, type:'p'}, mgD2:{slot:'dinner', density:25, type:'p'},
+  mgS2:{slot:'snack', density:11, type:'p'},
+  baB1:{slot:'breakfast', density:10, type:'p'},
+  baL1:{slot:'lunch', density:31, type:'p'}, baL2:{slot:'lunch', density:9, type:'p'}, baL3:{slot:'lunch', density:26, type:'p'},
+  baD1:{slot:'dinner', density:20, type:'p'}, baD2:{slot:'dinner', density:9, type:'p'}, baD3:{slot:'dinner', density:26, type:'p'}
+};
+/** Grams of a food that would deliver this meal's share of the plan's
+    daily protein or carb target, given the food's protein/carb density
+    (g per 100g) — rounded to a realistic 5g kitchen increment and capped
+    to a plausible per-meal serving range. */
+function scaledMealGrams(mealId, plan){
+  const info = MEAL_SCALE_INFO[mealId];
+  if(!info) return null;
+  const dailyTarget = info.type==='p' ? plan.proteinG : plan.carbG;
+  const fraction = MEAL_SLOT_FRACTION[info.slot];
+  const raw = (dailyTarget*fraction) / (info.density/100);
+  return clamp(Math.round(raw/5)*5, 40, 320);
+}
+function mealFoodText(mealId, plan){
+  const MF = I18N[currentLang].mealFoods;
+  let txt = MF[mealId] || '';
+  const grams = scaledMealGrams(mealId, plan);
+  if(grams!==null) txt = txt.replace('{p}', grams).replace('{c}', grams);
+  return txt;
+}
+
+function mealAllowed(meal, prefs){
+  const c = meal.contains;
+  const excludeList =
+    prefs.dietPattern==='vegan' ? VEGAN_EXCLUDE :
+    prefs.dietPattern==='vegetarian' ? VEG_EXCLUDE :
+    prefs.dietPattern==='pescatarian' ? PESC_EXCLUDE : [];
+  if(c.some(x=> excludeList.includes(x))) return false;
+  if((prefs.avoid||[]).some(a=> c.includes(a))) return false;
+  return true;
+}
+
+/* Picks one meal per slot for a plan, honoring dietary pattern + avoid
+   list (hard filters) and cuisine (soft preference). Falls back in
+   stages so a slot is never left empty: full match → dietary-pattern
+   match only (ignoring avoid, rare edge case like vegan+gluten-free
+   with no lentil-and-gluten-free option on hand) → any option at all. */
+function pickMealsForPlan(planKey, prefs){
+  return MEAL_SLOTS.map(slot=>{
+    const options = MEAL_LIBRARY[planKey][slot];
+    let pool = options.filter(m=> mealAllowed(m, {dietPattern:prefs.dietPattern, avoid:prefs.avoid}));
+    if(!pool.length) pool = options.filter(m=> mealAllowed(m, {dietPattern:prefs.dietPattern, avoid:[]}));
+    if(!pool.length) pool = options;
+    let chosen = pool;
+    if(prefs.cuisine && prefs.cuisine!=='any'){
+      const cuisineMatch = pool.filter(m=> m.cuisine===prefs.cuisine || m.cuisine==='general');
+      if(cuisineMatch.length) chosen = cuisineMatch;
+    }
+    const pick = chosen[Math.floor(Math.random()*chosen.length)];
+    return {slot, id:pick.id, icon:pick.icon};
+  });
+}
+
+function recommendedDietKey(goalKey){
+  if(goalKey==='muscleGain') return 'muscleGain';
+  if(goalKey==='recomp' || goalKey==='maintainCaution') return 'balanced';
+  return 'highProtein';
+}
+
+function computeDietPlans(d, n){
+  return DIET_PLAN_DEFS.map(p=>{
+    const cal = Math.round(p.calFn(n.tdee)/10)*10;
+    const proteinG = Math.round(d.weight * p.proteinPerKg);
+    const proteinCal = proteinG*4;
+    const remainingCal = Math.max(0, cal - proteinCal);
+    const carbG = Math.round(remainingCal*p.carbFatSplit.c/4);
+    const fatG = Math.round(remainingCal*p.carbFatSplit.f/9);
+    const macro = {p: proteinCal/cal, c: (carbG*4)/cal, f: (fatG*9)/cal};
+    return {...p, cal, proteinG, carbG, fatG, macro};
+  });
+}
+
+function drawMacroDonut(canvasEl, macro){
+  const size = 70, dpr = 2;
+  canvasEl.width = size*dpr; canvasEl.height = size*dpr;
+  canvasEl.style.width = size+'px'; canvasEl.style.height = size+'px';
+  const ctx = canvasEl.getContext('2d');
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,size,size);
+  const cx=size/2, cy=size/2, r=size/2-5, inner=r*0.55;
+  const segs = [{v:macro.p,c:MACRO_COLORS.protein},{v:macro.c,c:MACRO_COLORS.carb},{v:macro.f,c:MACRO_COLORS.fat}];
+  let start = -Math.PI/2;
+  segs.forEach(s=>{
+    const angle = s.v*Math.PI*2;
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,r,start,start+angle);
+    ctx.closePath();
+    ctx.fillStyle = s.c;
+    ctx.fill();
+    start += angle;
+  });
+  ctx.beginPath();
+  ctx.arc(cx,cy,inner,0,Math.PI*2);
+  ctx.fillStyle = '#FBFCFC';
+  ctx.fill();
+}
+
+function renderDietPlans(d, n){
+  const DP = I18N[currentLang].dietPlans;
+  const MF = I18N[currentLang].mealFoods;
+  const SL = I18N[currentLang].mealSlotLabels;
+  document.getElementById('dietPlansSub').textContent = DP.subtitle;
+
+  const plans = computeDietPlans(d, n);
+  const recKey = recommendedDietKey(n.goalKey);
+  const container = document.getElementById('dietPlans');
+  const prefs = {dietPattern: d.dietPattern || 'omnivore', cuisine: d.cuisine || 'any', avoid: d.avoid || []};
+  lastDietPlans = plans;
+  lastDietPrefs = prefs;
+
+  container.innerHTML = plans.map(p=>{
+    const info = DP.plans[p.key];
+    const isRec = p.key===recKey;
+    const meals = pickMealsForPlan(p.key, prefs);
+    return `
+      <div class="diet-card ${isRec?'recommended':''}" data-plan-key="${p.key}">
+        ${isRec ? `<div class="dc-badge">${DP.recommendedBadge}</div>` : ''}
+        <div class="dc-head">
+          <div class="dc-icon">${p.icon}</div>
+          <div class="dc-headtext">
+            <div class="dc-title">${info.title}</div>
+            <div class="dc-tagline">${info.tagline}</div>
+          </div>
+        </div>
+        <div class="dc-cal"><span class="n">${p.cal}</span><span class="u">${DP.kcalPerDay}</span></div>
+        <div class="dc-donut-row">
+          <canvas id="donut-${p.key}"></canvas>
+          <div class="dc-macro-legend">
+            <div class="row"><span class="sw" style="background:${MACRO_COLORS.protein}"></span>${DP.macroProtein} ${p.proteinG} g</div>
+            <div class="row"><span class="sw" style="background:${MACRO_COLORS.carb}"></span>${DP.macroCarb} ${p.carbG} g</div>
+            <div class="row"><span class="sw" style="background:${MACRO_COLORS.fat}"></span>${DP.macroFat} ${p.fatG} g</div>
+          </div>
+        </div>
+        <div class="dc-meals">
+          ${meals.map(m=>`<div class="dc-meal"><span class="mi">${m.icon}</span><span><span class="mt">${SL[m.slot]}</span> <span class="mf">${mealFoodText(m.id, p)}</span></span></div>`).join('')}
+        </div>
+        <button type="button" class="dc-shuffle" data-plan-key="${p.key}">${DP.shuffleBtn}</button>
+      </div>
+    `;
+  }).join('');
+
+  container.querySelectorAll('.dc-shuffle').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const key = btn.dataset.planKey;
+      const p = plans.find(x=>x.key===key);
+      const card = btn.closest('.diet-card');
+      const meals = pickMealsForPlan(key, prefs);
+      card.querySelector('.dc-meals').innerHTML =
+        meals.map(m=>`<div class="dc-meal"><span class="mi">${m.icon}</span><span><span class="mt">${SL[m.slot]}</span> <span class="mf">${mealFoodText(m.id, p)}</span></span></div>`).join('');
+    });
+  });
+
+  plans.forEach(p=> drawMacroDonut(document.getElementById(`donut-${p.key}`), p.macro));
+}
+
+/* Reads the on/off radio toggles above the Generate button. Keys:
+   'trend' (Progress Trend cards), 'chart' (the mini score/fat/
+   muscle/water trend diagram), 'dbcompare' (Compared to Database),
+  /* Reads the on/off state of a "Report Sections" toggle by key —
+   'trend', 'chart', 'dbcompare', or
+  /* Reads the on/off state of a "Report Sections" toggle by key —
+   'trend', 'chart', 'dbcompare', or
+   'diet' (Sample Diet Plans). Defaults to on if the control is
+   somehow missing. */
+function sectionEnabled(key){
+  const checked = document.querySelector(`input[name="toggle-${key}"]:checked`);
+  return checked ? checked.value === 'on' : true;
+}
+
+function renderReport(inputs){
+  lastInputs = inputs;
+  const d = computeAll(inputs);
+
+  document.getElementById('rClientName').textContent = inputs.clientName || t('defaultClientName');
+  const sexLabel = d.sex==='male' ? t('sexLabelMale') : t('sexLabelFemale');
+  document.getElementById('rMeta1').textContent = currentLang==='fa' ? `${sexLabel}، ${d.age} ${t('yrsSuffix')}` : `${sexLabel}, ${d.age} ${t('yrsSuffix')}`;
+  document.getElementById('rMeta2').textContent = `${d.height} cm · ${d.weight} kg · BMI ${d.bmi}`;
+  document.getElementById('rDate').textContent = currentLang==='fa'
+    ? new Date().toLocaleDateString('fa-IR')
+    : new Date().toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
+
+  document.getElementById('scoreNum').textContent = d.total;
+  document.getElementById('scoreOutOf').textContent = t('scoreOutOf');
+  const grade = gradeFor(d.total);
+  document.getElementById('scoreGrade').textContent = grade.g;
+  document.getElementById('scoreGrade').style.color = grade.c;
+
+  const circumference = 2*Math.PI*42;
+  const offset = circumference * (1 - d.total/100);
+  const arc = document.getElementById('scoreArc');
+  arc.style.stroke = grade.c;
+  arc.setAttribute('stroke-dasharray', circumference.toFixed(1));
+  arc.setAttribute('stroke-dashoffset', offset.toFixed(1));
+
+  renderGauges(d);
+  renderReferenceDetails(d);
+  document.getElementById('weightsNote').textContent = t('weightsNote');
+
+  drawScatter(document.getElementById('scatter'), d);
+  document.getElementById('chartLegend').innerHTML = `
+    <span><span class="sw" style="background:#CDEAE3"></span>${t('legendAthletic')}</span>
+    <span><span class="sw" style="background:#E5EFE8"></span>${t('legendFit')}</span>
+    <span><span class="sw" style="background:#F7E4D6"></span>${t('legendSkinnyOver')}</span>
+    <span><span class="sw" style="background:#F3DADA"></span>${t('legendObese')}</span>
+    <span><span class="sw" style="background:#0F2438;border-radius:50%"></span>${t('legendClient')}</span>
+    <span><span class="sw" style="background:#fff;border:2px solid #127A6E;border-radius:50%"></span>${t('legendTarget')}</span>
+  `;
+
+  document.getElementById('summaryText').innerHTML = buildSummary(d);
+  document.getElementById('targetLine').innerHTML =
+    `${t('suggestedTarget')} — ${t('labelFat')} ≤ <b>${d.targetFat}%</b>, BMI ≈ <b>${d.targetBmi}</b> ${inputs.notes ? '· '+t('note')+': '+escapeHtml(inputs.notes) : ''}`;
+
+  renderNutrition(d);
+  const dietSection = document.getElementById('dietPlansSection');
+  if(sectionEnabled('diet')){
+    dietSection.style.display = 'block';
+    renderDietPlans(d, computeNutrition(d));
+  } else {
+    dietSection.style.display = 'none';
+  }
+
+  document.getElementById('disclaimerText').textContent = t('disclaimer');
+
+  document.getElementById('report-empty').style.display='none';
+  document.getElementById('dbOverviewPanel').style.display='none';
+  document.getElementById('report').style.display='block';
+  document.getElementById('exportBtn').disabled = false;
+  document.getElementById('imageBtn').disabled = false;
+  document.getElementById('shareBtn').disabled = false;
+  document.getElementById('htmlExportBtn').disabled = false;
+  initCollapsibleSections();
+}
+
+/* ============================================================
+   PROGRESS TREND — shown when the client already has prior saved
+   test results. `current` is the inputs object for the report on
+   screen (may include a `savedAt` if this is a loaded historical
+   report); `priorRecords` is that client's earlier records, oldest
+   first, already restricted to dates before `current`.
+   ============================================================ */
+function renderTrend(current, priorRecords){
+  const section = document.getElementById('trendSection');
+  const miniCardEl = document.getElementById('trendMiniCard');
+  if(!priorRecords || !priorRecords.length){
+    section.style.display = 'none';
+    if(miniCardEl) miniCardEl.style.display = 'none';
+    return;
+  }
+
+  const d = computeAll(current);
+  const currentPoint = {
+    savedAt: current.savedAt || new Date().toISOString(),
+    weight: d.weight, fat: d.fat, muscle: d.muscle, water: d.water, total: d.total
+  };
+  const last = priorRecords[priorRecords.length - 1];
+  const first = priorRecords[0];
+
+  if(!sectionEnabled('trend')){
+    section.style.display = 'none';
+  } else {
+    section.style.display = 'block';
+    section.classList.add('open');
+
+    document.getElementById('trendMeta').textContent = t('trendMetaTemplate')
+      .replace('{n}', priorRecords.length)
+      .replace('{date}', historyDateLabel(first.savedAt));
+
+    const metrics = [
+      {key:'weight', label:t('labelWeight'),     unit:' kg', digits:1, dir:0},
+      {key:'fat',    label:t('labelFat'),        unit:'%',   digits:1, dir:-1},
+      {key:'muscle', label:t('labelMuscle'),     unit:'%',   digits:1, dir:1},
+      {key:'water',  label:t('labelWater'),      unit:'%',   digits:1, dir:0},
+      {key:'total',  label:t('trendScoreLabel'), unit:'',    digits:0, dir:1}
+    ];
+
+    document.getElementById('trendCards').innerHTML = metrics.map(m=>{
+      const cur = currentPoint[m.key];
+      return `
+        <div class="trend-card">
+          <div class="tc-label">${escapeHtml(m.label)}</div>
+          <div class="tc-value">${fmtNum(cur, m.digits)}${m.unit}</div>
+          ${trendDeltaLine(cur - last[m.key], m, t('trendSinceLast'))}
+          <div class="tc-delta-sub">${trendDeltaText(cur - first[m.key], m)} ${t('trendSinceFirst')}</div>
+        </div>`;
+    }).join('');
+  }
+
+  if(!miniCardEl) return;
+  if(!sectionEnabled('chart')){
+    miniCardEl.style.display = 'none';
+  } else {
+    miniCardEl.style.display = 'block';
+    drawTrendChart(document.getElementById('trendChart'), priorRecords.concat([currentPoint]));
+    document.getElementById('trendChartLegend').innerHTML = TREND_SERIES.map(s=>
+      `<span><span class="sw" style="background:${s.color}"></span>${escapeHtml(t(s.labelKey))}</span>`
+    ).join('');
+  }
+}
+
+function fmtNum(v, digits){
+  const r = Math.round(v * Math.pow(10, digits)) / Math.pow(10, digits);
+  return r;
+}
+function trendDeltaText(delta, m){
+  const r = fmtNum(delta, m.digits);
+  const sign = r > 0 ? '+' : '';
+  return `${sign}${r}${m.unit}`;
+}
+function trendDeltaLine(delta, m, label){
+  const r = fmtNum(delta, m.digits);
+  const threshold = m.digits === 0 ? 0.5 : 0.05;
+  let cls = 'neutral', arrow = '→';
+  if(Math.abs(r) >= threshold){
+    if(m.dir === 0){
+      arrow = r > 0 ? '↑' : '↓';
+      cls = 'neutral';
+    } else {
+      const improved = (r > 0 && m.dir === 1) || (r < 0 && m.dir === -1);
+      cls = improved ? 'up' : 'down';
+      arrow = r > 0 ? '↑' : '↓';
+    }
+  }
+  const sign = r > 0 ? '+' : '';
+  return `<div class="tc-delta ${cls}">${arrow} ${sign}${r}${m.unit}<span class="tc-delta-label">${escapeHtml(label)}</span></div>`;
+}
+
+/* Each series is normalized by roughly how much that metric
+   typically moves between two BIA check-ins (a few weeks apart)
+   for someone actively training/dieting. Dividing by that value
+   before plotting means "one typical change" takes up the same
+   vertical distance on screen for every line, regardless of
+   whether the raw units are score points or body-fat percent —
+   that's the "similar sensitivity" scaling. */
+const TREND_SERIES = [
+  {key:'total',  labelKey:'trendScoreLabel', color:'#0F2438', typicalChange:5},
+  {key:'fat',    labelKey:'labelFat',        color:'#C9622A', typicalChange:1.5},
+  {key:'muscle', labelKey:'labelMuscle',     color:'#2B5FA3', typicalChange:1.0},
+  {key:'water',  labelKey:'labelWater',      color:'#7B5EA7', typicalChange:1.0}
+];
+
+/* Compact multi-series line chart (no external chart library)
+   plotting score, fat%, muscle% and water% together on one
+   shared, self-scaled axis. Each line's own first point is its
+   zero line, so what's shown is "how many typical changes has
+   this metric moved," not raw absolute values. */
+function drawTrendChart(canvas, points){
+  const pts = points.slice(-8);
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const padL = 22, padR = 8, padT = 10, padB = 20;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const UNITS = 3; // +/- 3 "typical changes" of vertical range
+
+  [-2,-1,0,1,2].forEach(u=>{
+    const y = padT + plotH * (1 - (u+UNITS)/(UNITS*2));
+    ctx.strokeStyle = u===0 ? '#DCE2E4' : '#EEF1F1';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(W - padR, y);
+    ctx.stroke();
+  });
+
+  const stepX = pts.length > 1 ? plotW/(pts.length - 1) : 0;
+  const xFor = i => padL + stepX*i;
+  const yFor = u => padT + plotH * (1 - (clamp(u,-UNITS,UNITS)+UNITS)/(UNITS*2));
+
+  TREND_SERIES.forEach(s=>{
+    const base = pts[0][s.key];
+    const norm = pts.map(p => (p[s.key] - base) / s.typicalChange);
+
+    ctx.beginPath();
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    norm.forEach((u,i)=>{
+      const x = xFor(i), y = yFor(u);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+
+    norm.forEach((u,i)=>{
+      const isLast = i === norm.length - 1;
+      const x = xFor(i), y = yFor(u);
+      ctx.beginPath();
+      ctx.arc(x, y, isLast ? 3.8 : 2.4, 0, Math.PI*2);
+      ctx.fillStyle = s.color;
+      ctx.fill();
+      if(isLast){
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+    });
+  });
+
+  ctx.fillStyle = '#9AA7B0';
+  ctx.font = '8.5px "IBM Plex Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  pts.forEach((p,i)=>{
+    if(pts.length > 5 && i%2===1 && i!==pts.length-1) return; // thin labels if crowded
+    let lbl = '';
+    try{ lbl = new Date(p.savedAt).toLocaleDateString(undefined, {month:'numeric', day:'numeric'}); } catch(e){}
+    ctx.fillText(lbl, xFor(i), padT + plotH + 4);
+  });
+}
+
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+/* ============================================================
+   EVENTS
+   ============================================================ */
+
+/* ------------- Enter-key auto-advance: mobile numeric keypads show
+   "next"/"done" thanks to enterkeyhint, and this makes Enter actually
+   move focus instead of doing nothing (or submitting) ------------- */
+const FIELD_CHAIN = ['clientName','sex','height','age','weight','fat','water','muscle','bone'];
+FIELD_CHAIN.forEach((id, idx)=>{
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.addEventListener('keydown', (e)=>{
+    if(e.key !== 'Enter') return;
+    e.preventDefault();
+    const nextId = FIELD_CHAIN[idx+1];
+    const nextEl = nextId && document.getElementById(nextId);
+    if(nextEl){
+      nextEl.focus();
+      if(typeof nextEl.select === 'function') nextEl.select();
+    } else {
+      document.getElementById('generateBtn').click();
+    }
+  });
+});
+
+/* ------------- Live sanity checks: flags values that fall outside
+   plausible human ranges or contradict each other, based on standard
+   BMI/body-composition physiology — non-blocking, just a heads-up so
+   a typo (e.g. 700 instead of 70.0) gets caught before it's on a
+   client's report. ------------- */
+function runSanityChecks(inputs){
+  const warnings = [];
+  const {sex, height, weight, fat, water, muscle} = inputs;
+
+  if(isFinite(height) && isFinite(weight) && height > 0){
+    const bmi = weight / ((height/100)**2);
+    if(bmi < 13 || bmi > 55){
+      warnings.push(t('warnBMI').replace('{bmi}', bmi.toFixed(1)));
+    }
+  }
+  if(isFinite(fat)){
+    const lo = sex==='male' ? 3 : 8, hi = sex==='male' ? 60 : 65;
+    if(fat < lo || fat > hi) warnings.push(t('warnFat'));
+  }
+  if(isFinite(water) && (water < 35 || water > 75)) warnings.push(t('warnWater'));
+  if(isFinite(muscle) && (muscle < 15 || muscle > 55)) warnings.push(t('warnMuscle'));
+  if(isFinite(fat) && isFinite(water) && (fat+water) > 95) warnings.push(t('warnFatWaterSum'));
+  if(isFinite(fat) && isFinite(muscle) && muscle > (100-fat)) warnings.push(t('warnMuscleExceeds'));
+  return warnings;
+}
+
+function updateSanityWarning(){
+  const inputs = {
+    sex: document.getElementById('sex').value,
+    height: parseFloat(document.getElementById('height').value),
+    weight: parseFloat(document.getElementById('weight').value),
+    fat: parseFloat(document.getElementById('fat').value),
+    water: parseFloat(document.getElementById('water').value),
+    muscle: parseFloat(document.getElementById('muscle').value)
+  };
+  const warnings = runSanityChecks(inputs);
+  const box = document.getElementById('sanityWarning');
+  if(warnings.length){
+    box.style.display = 'block';
+    box.innerHTML = warnings.map(w => '⚠ ' + escapeHtml(w)).join('<br>');
+  } else {
+    box.style.display = 'none';
+    box.innerHTML = '';
+  }
+}
+['sex','height','weight','fat','water','muscle'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.addEventListener('input', updateSanityWarning);
+  el.addEventListener('change', updateSanityWarning);
+});
+
+document.querySelectorAll('#avoidPills input').forEach(cb=>{
+  cb.addEventListener('change', ()=>{
+    cb.closest('.avoid-pill').classList.toggle('checked', cb.checked);
+  });
+});
+
+document.getElementById('generateBtn').addEventListener('click', async ()=>{
+  const errBox = document.getElementById('errBox');
+  errBox.style.display='none';
+
+  const inputs = {
+    clientName: document.getElementById('clientName').value.trim(),
+    sex: document.getElementById('sex').value,
+    age: parseFloat(document.getElementById('age').value),
+    height: parseFloat(document.getElementById('height').value),
+    weight: parseFloat(document.getElementById('weight').value),
+    fat: parseFloat(document.getElementById('fat').value),
+    water: parseFloat(document.getElementById('water').value),
+    muscle: parseFloat(document.getElementById('muscle').value),
+    bone: document.getElementById('bone').value ? parseFloat(document.getElementById('bone').value) : null,
+    activity: document.getElementById('activity').value,
+    dietPattern: document.getElementById('dietPattern').value,
+    cuisine: document.getElementById('cuisine').value,
+    avoid: Array.from(document.querySelectorAll('#avoidPills input:checked')).map(cb => cb.value),
+    notes: document.getElementById('notes').value.trim()
+  };
+
+  const required = ['age','height','weight','fat','water','muscle'];
+  const missing = required.filter(k=> isNaN(inputs[k]) || inputs[k]===null);
+  if(missing.length){
+    errBox.textContent = t('errMissing') + missing.join(', ');
+    errBox.style.display='block';
+    return;
+  }
+
+  // Look up this client's prior test results (matched by normalized
+  // client name) and the whole database BEFORE saving the new one,
+  // so both the trend and the percentile comparison are against
+  // previously saved visits only.
+  const priorRecords = await getClientRecords(inputs.clientName);
+  const allRecords = await getAllRecords();
+
+  renderReport(inputs);
+  lastExcludeKey = null;
+  renderTrend(inputs, priorRecords);
+  renderDbCompare(inputs, allRecords, null);
+  saveReportToHistory(inputs);
+});
+
+/* Re-apply the current report's section visibility whenever a
+   toggle changes, so flipping a radio updates the report already
+   on screen instead of only affecting the next "Generate Report". */
+async function reapplyToggles(){
+  if(!lastInputs) return;
+  renderReport(lastInputs);
+  const clientRecords = await getClientRecords(lastInputs.clientName);
+  const priorRecords = lastInputs.savedAt
+    ? clientRecords.filter(r => (r.savedAt||'') < (lastInputs.savedAt||''))
+    : clientRecords;
+  renderTrend(lastInputs, priorRecords);
+  const allRecords = await getAllRecords();
+  renderDbCompare(lastInputs, allRecords, lastExcludeKey);
+}
+document.querySelectorAll('input[name^="toggle-"]').forEach(el=>{
+  el.addEventListener('change', reapplyToggles);
+});
+
+function fillFormFromInputs(inputs){
+  document.getElementById('clientName').value = inputs.clientName || '';
+  document.getElementById('sex').value = inputs.sex;
+  document.getElementById('age').value = inputs.age;
+  document.getElementById('height').value = inputs.height;
+  document.getElementById('weight').value = inputs.weight;
+  document.getElementById('fat').value = inputs.fat;
+  document.getElementById('water').value = inputs.water;
+  document.getElementById('muscle').value = inputs.muscle;
+  document.getElementById('bone').value = inputs.bone===null || inputs.bone===undefined ? '' : inputs.bone;
+  if(document.getElementById('activity') && inputs.activity) document.getElementById('activity').value = inputs.activity;
+  document.getElementById('dietPattern').value = inputs.dietPattern || 'omnivore';
+  document.getElementById('cuisine').value = inputs.cuisine || 'any';
+  const avoidSet = new Set(inputs.avoid || []);
+  document.querySelectorAll('#avoidPills input').forEach(cb=>{
+    cb.checked = avoidSet.has(cb.value);
+    cb.closest('.avoid-pill').classList.toggle('checked', cb.checked);
+  });
+  document.getElementById('notes').value = inputs.notes || '';
+}
+
+/* ============================================================
+   SAVED REPORTS — persisted via a small storage adapter so the
+   tool keeps history both inside Claude (window.storage, Claude's
+   built-in per-artifact key/value store) and as a plain downloaded
+   HTML file opened in any normal browser (localStorage). Data is
+   personal/local either way — never sent anywhere. If neither API
+   is available (e.g. storage blocked in a locked-down browser),
+   history is simply disabled and the report tool still works.
+   ============================================================ */
+const HISTORY_PREFIX = 'report:';
+const LOCAL_STORAGE_NS = 'biaReportTool::';
+
+const hasClaudeStorage = typeof window !== 'undefined' && !!window.storage;
+
+function detectLocalStorage(){
+  try{
+    if(typeof localStorage === 'undefined') return false;
+    const k = '__bia_probe__';
+    localStorage.setItem(k, '1');
+    localStorage.removeItem(k);
+    return true;
+  } catch(e){ return false; }
+}
+const hasLocalStorage = !hasClaudeStorage && detectLocalStorage();
+const storageAvailable = hasClaudeStorage || hasLocalStorage;
+const storageBackend = hasClaudeStorage ? 'claude' : (hasLocalStorage ? 'local' : 'none');
+
+/* Same shape as window.storage (get/set/delete/list), backed by
+   whichever engine is actually available. Only ever touches
+   localStorage when window.storage is absent, so behavior inside
+   Claude is unchanged. */
+const storageAdapter = {
+  async get(key, shared){
+    if(hasClaudeStorage) return window.storage.get(key, shared);
+    const raw = localStorage.getItem(LOCAL_STORAGE_NS + key);
+    if(raw === null) throw new Error('key not found');
+    return {key, value: raw, shared: !!shared};
+  },
+  async set(key, value, shared){
+    if(hasClaudeStorage) return window.storage.set(key, value, shared);
+    localStorage.setItem(LOCAL_STORAGE_NS + key, value);
+    return {key, value, shared: !!shared};
+  },
+  async delete(key, shared){
+    if(hasClaudeStorage) return window.storage.delete(key, shared);
+    localStorage.removeItem(LOCAL_STORAGE_NS + key);
+    return {key, deleted:true, shared: !!shared};
+  },
+  async list(prefix, shared){
+    if(hasClaudeStorage) return window.storage.list(prefix, shared);
+    const p = LOCAL_STORAGE_NS + (prefix || '');
+    const keys = [];
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if(k && k.indexOf(p) === 0) keys.push(k.slice(LOCAL_STORAGE_NS.length));
+    }
+    return {keys, prefix, shared: !!shared};
+  }
+};
+
+function historyDateLabel(iso){
+  try{
+    const d = new Date(iso);
+    return d.toLocaleDateString(currentLang==='fa' ? 'fa-IR-u-ca-gregory' : undefined, {year:'numeric',month:'short',day:'numeric'});
+  } catch(e){ return iso; }
+}
+
+/* Normalize a client name into a stable storage-key fragment so that
+   repeat visits from the same client land under one queryable prefix
+   (report:<slug>:<timestamp>-<rand>). Records saved without a client
+   name fall outside the trend feature — there's nothing to match them
+   to on a future visit. */
+function clientSlug(name){
+  const s = (name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return s || '__unnamed__';
+}
+
+/* Fetch every saved test result for a given client, oldest first.
+   Used both to build the trend comparison after generating a new
+   report, and to reconstruct "as of that date" trends when loading
+   an older saved report from history. */
+async function getClientRecords(clientName){
+  if(!storageAvailable) return [];
+  const slug = clientSlug(clientName);
+  if(slug === '__unnamed__') return [];
+  try{
+    const res = await storageAdapter.list(HISTORY_PREFIX + slug + ':', false);
+    const keys = (res && res.keys) || [];
+    const recs = [];
+    for(const key of keys){
+      try{
+        const r = await storageAdapter.get(key, false);
+        if(r && r.value) recs.push(JSON.parse(r.value));
+      } catch(e){ /* skip unreadable entries */ }
+    }
+    recs.sort((a,b)=> (a.savedAt||'').localeCompare(b.savedAt||''));
+    return recs;
+  } catch(e){
+    console.error('Could not load client history:', e);
+    return [];
+  }
+}
+
+/* ============================================================
+   DATABASE OVERVIEW & PERCENTILE COMPARISON — reads every record
+   in storage (not just one client's) to show aggregate stats on
+   load, and to rank an individual report against everyone else
+   on file.
+   ============================================================ */
+
+/* Every saved test result across every client, unsorted. Each
+   record carries its own storage key as __key so callers can
+   exclude "self" when comparing a record against the rest of
+   the database. */
+async function getAllRecords(){
+  if(!storageAvailable) return [];
+  try{
+    const res = await storageAdapter.list(HISTORY_PREFIX, false);
+    const keys = (res && res.keys) || [];
+    const recs = [];
+    for(const key of keys){
+      try{
+        const r = await storageAdapter.get(key, false);
+        if(r && r.value){
+          const parsed = JSON.parse(r.value);
+          parsed.__key = key;
+          recs.push(parsed);
+        }
+      } catch(e){ /* skip unreadable entries */ }
+    }
+    return recs;
+  } catch(e){
+    console.error('Could not load database records:', e);
+    return [];
+  }
+}
+
+function computeDbStats(records){
+  if(!records || !records.length) return null;
+  const n = records.length;
+  const sum = {age:0, height:0, weight:0, fat:0, water:0, muscle:0, total:0};
+  const sexCount = {male:0, female:0};
+  const clients = new Set();
+  records.forEach(r=>{
+    sum.age += r.age; sum.height += r.height; sum.weight += r.weight;
+    sum.fat += r.fat; sum.water += r.water; sum.muscle += r.muscle;
+    sum.total += r.total;
+    sexCount[r.sex] = (sexCount[r.sex]||0) + 1;
+    clients.add(clientSlug(r.clientName));
+  });
+  const avg = {
+    age: Math.round(sum.age/n),
+    height: Math.round(sum.height/n*10)/10,
+    weight: Math.round(sum.weight/n*10)/10,
+    fat: Math.round(sum.fat/n*10)/10,
+    water: Math.round(sum.water/n*10)/10,
+    muscle: Math.round(sum.muscle/n*10)/10,
+    total: Math.round(sum.total/n)
+  };
+  const dominantSex = sexCount.male >= sexCount.female ? 'male' : 'female';
+  return {count:n, clientCount:clients.size, avg, dominantSex};
+}
+
+/* Shown in place of the empty state before any report is on
+   screen — averages across everything saved so far, with a
+   one-click way to generate a report built from those averages. */
+async function renderDbOverview(){
+  const panel = document.getElementById('dbOverviewPanel');
+  if(!panel) return;
+  const reportShown = document.getElementById('report').style.display === 'block';
+  if(!storageAvailable || reportShown){
+    panel.style.display = 'none';
+    return;
+  }
+  const records = await getAllRecords();
+  const stats = computeDbStats(records);
+  if(!stats){
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+
+  document.getElementById('dbOverviewMeta').textContent = t('dbOverviewMetaTemplate')
+    .replace('{n}', stats.count).replace('{c}', stats.clientCount);
+
+  const ageBand = ageBand5(stats.avg.age);
+  const fatZone = zoneNameFat(stats.avg.fat, FAT_RANGES[stats.dominantSex][ageBand]);
+  const waterZone = zoneNameWater(stats.avg.water, WATER_RANGES[stats.dominantSex][waterBand(stats.avg.age)]);
+  const muscleZone = zoneNameMuscle(stats.avg.muscle, MUSCLE_RANGES[stats.dominantSex][muscleBand(stats.avg.age)]);
+
+  const cards = [
+    {label:t('trendScoreLabel'), value:stats.avg.total, unit:''},
+    {label:t('labelWeight'), value:stats.avg.weight, unit:' kg'},
+    {label:t('labelFat'), value:stats.avg.fat, unit:'%', zone:fatZone},
+    {label:t('labelMuscle'), value:stats.avg.muscle, unit:'%', zone:muscleZone},
+    {label:t('labelWater'), value:stats.avg.water, unit:'%', zone:waterZone}
+  ];
+  document.getElementById('dbOverviewStats').innerHTML = cards.map(c=>`
+    <div class="trend-card">
+      <div class="tc-label">${escapeHtml(c.label)}</div>
+      <div class="tc-value">${c.value}${c.unit}</div>
+      ${c.zone ? `<div class="tc-tag ${c.zone.tone}">${escapeHtml(c.zone.label)}</div>` : ''}
+    </div>`).join('');
+}
+
+/* Percentile of `value` within `arr`, where a higher value is
+   assumed to be the "better" direction (true for score/fatScore/
+   muscleScore/waterScore, which are all already 0-100 where
+   higher = healthier). Returns 0-100, or null if arr is empty. */
+function percentileRank(value, arr){
+  if(!arr || !arr.length) return null;
+  const countAtOrBelow = arr.filter(v => v <= value).length;
+  return Math.round(countAtOrBelow/arr.length*100);
+}
+
+function formatPercentileTag(rank){
+  if(rank >= 50){
+    const topPct = Math.max(1, 100 - rank);
+    return {text: t('topPercentLabel').replace('{p}', topPct), tone: rank>=75 ? 'teal' : 'amber'};
+  }
+  const bottomPct = Math.max(1, rank);
+  return {text: t('bottomPercentLabel').replace('{p}', bottomPct), tone: rank<25 ? 'red' : 'amber'};
+}
+
+/* Ranks `current`'s score and sub-scores against every other
+   record in the database. `excludeKey` lets a report loaded from
+   history exclude itself from its own comparison set. */
+function renderDbCompare(current, allRecords, excludeKey){
+  const section = document.getElementById('dbCompareSection');
+  if(!sectionEnabled('dbcompare')){
+    section.style.display = 'none';
+    return;
+  }
+  const others = (allRecords || []).filter(r => r.__key !== excludeKey);
+  const MIN_N = 3;
+  if(others.length < MIN_N){
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+  section.classList.add('open');
+
+  const d = computeAll(current);
+  const otherScored = others.map(r => computeAll(r));
+
+  document.getElementById('dbCompareMeta').textContent = t('dbCompareMetaTemplate').replace('{n}', others.length);
+
+  const metrics = [
+    {key:'total', label:t('trendScoreLabel')},
+    {key:'fatScore', label:t('labelFat')},
+    {key:'muscleScore', label:t('labelMuscle')},
+    {key:'waterScore', label:t('labelWater')}
+  ];
+  document.getElementById('dbCompareCards').innerHTML = metrics.map(m=>{
+    const arr = otherScored.map(s => s[m.key]);
+    const rank = percentileRank(d[m.key], arr);
+    const tag = formatPercentileTag(rank);
+    return `
+      <div class="trend-card">
+        <div class="tc-label">${escapeHtml(m.label)}</div>
+        <div class="tc-value">${d[m.key]}</div>
+        <div class="tc-tag ${tag.tone}">${escapeHtml(tag.text)}</div>
+        <div class="tc-delta-sub">${t('dbCompareOfN').replace('{n}', others.length)}</div>
+      </div>`;
+  }).join('');
+}
+
+document.getElementById('dbAverageBtn').addEventListener('click', async ()=>{
+  const records = await getAllRecords();
+  const stats = computeDbStats(records);
+  if(!stats) return;
+
+  const inputs = {
+    clientName: t('dbAverageClientName'),
+    sex: stats.dominantSex,
+    age: stats.avg.age, height: stats.avg.height, weight: stats.avg.weight,
+    fat: stats.avg.fat, water: stats.avg.water, muscle: stats.avg.muscle,
+    bone: null, activity: 'moderate', dietPattern: 'omnivore', cuisine: 'any', avoid: [],
+    notes: t('dbAverageNote').replace('{n}', stats.count)
+  };
+
+  fillFormFromInputs(inputs);
+  renderReport(inputs);
+  lastExcludeKey = null;
+  document.getElementById('trendSection').style.display = 'none';
+  document.getElementById('trendMiniCard').style.display = 'none';
+  renderDbCompare(inputs, records, null);
+  lastInputs = inputs;
+  document.getElementById('report').scrollIntoView({behavior:'smooth', block:'start'});
+  // Intentionally not saved to history — this is a synthetic
+  // snapshot of the database, not a real client visit.
+});
+
+async function saveReportToHistory(inputs){
+  if(!storageAvailable) return;
+  try{
+    const computed = computeAll(inputs);
+    const id = HISTORY_PREFIX + clientSlug(inputs.clientName) + ':' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
+    const record = Object.assign({}, inputs, {
+      total: computed.total,
+      savedAt: new Date().toISOString()
+    });
+    await storageAdapter.set(id, JSON.stringify(record), false);
+    await refreshHistoryList();
+  } catch(e){
+    console.error('Could not save report to history:', e);
+  }
+}
+
+async function refreshHistoryList(){
+  await _refreshHistoryListInner();
+  await renderDbOverview();
+}
+async function _refreshHistoryListInner(){
+  const listEl = document.getElementById('historyList');
+  const emptyEl = document.getElementById('historyEmpty');
+  const unsupportedEl = document.getElementById('historyUnsupported');
+  const clearBtn = document.getElementById('clearHistoryBtn');
+  const backupRow = document.getElementById('backupActions');
+
+  if(!storageAvailable){
+    listEl.innerHTML = '';
+    emptyEl.style.display = 'none';
+    unsupportedEl.style.display = 'block';
+    clearBtn.style.display = 'none';
+    if(backupRow) backupRow.style.display = 'none';
+    return;
+  }
+  unsupportedEl.style.display = 'none';
+  if(backupRow) backupRow.style.display = 'flex';
+
+  let keys = [];
+  try{
+    const res = await storageAdapter.list(HISTORY_PREFIX, false);
+    keys = (res && res.keys) || [];
+  } catch(e){
+    console.error('Could not list saved reports:', e);
+    listEl.innerHTML = '';
+    emptyEl.style.display = 'block';
+    clearBtn.style.display = 'none';
+    return;
+  }
+
+  if(!keys.length){
+    listEl.innerHTML = '';
+    emptyEl.style.display = 'block';
+    clearBtn.style.display = 'none';
+    return;
+  }
+
+  const records = [];
+  for(const key of keys){
+    try{
+      const res = await storageAdapter.get(key, false);
+      if(res && res.value){
+        const parsed = JSON.parse(res.value);
+        records.push({key, data: parsed});
+      }
+    } catch(e){ /* skip unreadable entries */ }
+  }
+  records.sort((a,b)=> (b.data.savedAt||'').localeCompare(a.data.savedAt||''));
+
+  if(!records.length){
+    listEl.innerHTML = '';
+    emptyEl.style.display = 'block';
+    clearBtn.style.display = 'none';
+    return;
+  }
+
+  emptyEl.style.display = 'none';
+  clearBtn.style.display = 'inline';
+  listEl.innerHTML = '';
+  records.forEach(({key, data})=>{
+    const el = document.createElement('div');
+    el.className = 'history-item';
+    el.innerHTML = `
+      <div class="hi-main">
+        <div class="hi-name">${escapeHtml(data.clientName || t('defaultClientName'))}</div>
+        <div class="hi-meta">${historyDateLabel(data.savedAt)}</div>
+      </div>
+      <div class="hi-score">${data.total}</div>
+      <div class="hi-actions">
+        <button class="hi-load" type="button">${t('hiLoad')}</button>
+        <button class="hi-del" type="button">${t('hiDelete')}</button>
+      </div>
+    `;
+    el.querySelector('.hi-load').addEventListener('click', async ()=>{
+      fillFormFromInputs(data);
+      renderReport(data);
+      lastExcludeKey = key;
+      const clientRecords = await getClientRecords(data.clientName);
+      const priorRecords = clientRecords.filter(r => (r.savedAt||'') < (data.savedAt||''));
+      renderTrend(data, priorRecords);
+      const allRecords = await getAllRecords();
+      renderDbCompare(data, allRecords, key);
+      lastInputs = data;
+      document.getElementById('report').scrollIntoView({behavior:'smooth', block:'start'});
+    });
+    el.querySelector('.hi-del').addEventListener('click', async ()=>{
+      if(!confirm(t('confirmDeleteOne'))) return;
+      try{
+        await storageAdapter.delete(key, false);
+        await refreshHistoryList();
+      } catch(e){ console.error('Could not delete report:', e); }
+    });
+    listEl.appendChild(el);
+  });
+}
+
+document.getElementById('clearHistoryBtn').addEventListener('click', async ()=>{
+  if(!storageAvailable) return;
+  if(!confirm(t('confirmClearAll'))) return;
+  try{
+    const res = await storageAdapter.list(HISTORY_PREFIX, false);
+    const keys = (res && res.keys) || [];
+    for(const key of keys){
+      try{ await storageAdapter.delete(key, false); } catch(e){ /* continue */ }
+    }
+    await refreshHistoryList();
+  } catch(e){ console.error('Could not clear history:', e); }
+});
+
+/* ------------------------------------------------------------
+   Backup / restore — exports every saved report as one JSON file
+   (raw storage key + value pairs) and can re-import it later, on
+   this device or any other. This is the portable "database" the
+   in-browser storage can't give you on its own: move history
+   between browsers/computers, or keep an offline copy.
+   ------------------------------------------------------------ */
+document.getElementById('backupBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('backupBtn');
+  try{
+    const res = await storageAdapter.list(HISTORY_PREFIX, false);
+    const keys = (res && res.keys) || [];
+    const records = [];
+    for(const key of keys){
+      try{
+        const r = await storageAdapter.get(key, false);
+        if(r && typeof r.value === 'string') records.push({key, value: r.value});
+      } catch(e){ /* skip unreadable entries */ }
+    }
+    if(!records.length){
+      alert(t('backupEmpty'));
+      return;
+    }
+    const payload = {
+      app: 'bia-composition-report-tool',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      count: records.length,
+      records
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+    downloadBlob(blob, `bia-report-backup-${new Date().toISOString().slice(0,10)}.json`);
+  } catch(e){
+    console.error('Backup failed:', e);
+    alert(t('backupFailed') + e.message);
+  }
+});
+
+document.getElementById('restoreBtn').addEventListener('click', ()=>{
+  document.getElementById('restoreFile').click();
+});
+document.getElementById('restoreFile').addEventListener('change', async (e)=>{
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    const records = Array.isArray(payload.records) ? payload.records : [];
+    const valid = records.filter(r => r && typeof r.key === 'string' && r.key.indexOf(HISTORY_PREFIX) === 0 && typeof r.value === 'string');
+    if(!valid.length){
+      alert(t('restoreEmpty'));
+      return;
+    }
+    if(!confirm(t('confirmRestore').replace('{n}', valid.length))) return;
+    let ok = 0;
+    for(const rec of valid){
+      try{ await storageAdapter.set(rec.key, rec.value, false); ok++; }
+      catch(err){ /* skip individual failures, keep restoring the rest */ }
+    }
+    await refreshHistoryList();
+    alert(t('restoreDone').replace('{n}', ok));
+  } catch(e){
+    console.error('Restore failed:', e);
+    alert(t('restoreFailed') + e.message);
+  }
+});
+
+refreshHistoryList();
+
+/* ------------------------------------------------------------
+   Export-time fix: html2canvas can drift an absolutely-positioned
+   overlay (the score number) away from a CSS-transformed SVG
+   (the ring) because it lays the two out through separate code
+   paths. To make the exported PDF pixel-safe, bake the ring +
+   number into a single flattened <canvas> image right before
+   capture, then restore the live SVG/DOM version afterward.
+   ------------------------------------------------------------ */
+async function flattenScoreRingForExport(){
+  const wrap = document.querySelector('.score-ring-wrap');
+  const svg = wrap.querySelector('svg');
+  const numDiv = wrap.querySelector('.score-num');
+  const size = 96, dpr = 3;
+
+  const flat = document.createElement('canvas');
+  flat.width = size*dpr;
+  flat.height = size*dpr;
+  flat.style.width = size+'px';
+  flat.style.height = size+'px';
+  flat.style.position = 'absolute';
+  flat.style.top = '0';
+  flat.style.left = '0';
+  flat.style.display = 'block';
+  const ctx = flat.getContext('2d');
+  ctx.scale(dpr,dpr);
+  ctx.direction = currentLang==='fa' ? 'rtl' : 'ltr';
+
+  const svgData = new XMLSerializer().serializeToString(svg);
+  const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData);
+  const img = new Image();
+  await new Promise((resolve,reject)=>{
+    img.onload = resolve;
+    img.onerror = reject;
+    img.src = svgUrl;
+  });
+  ctx.drawImage(img, 0, 0, size, size);
+
+  const n = document.getElementById('scoreNum').textContent;
+  const d = document.getElementById('scoreOutOf').textContent;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#0F2438';
+  ctx.font = "700 26px 'Space Grotesk', 'Vazirmatn', sans-serif";
+  ctx.fillText(n, size/2, size/2 - 6);
+  ctx.fillStyle = '#3E5266';
+  ctx.font = currentLang==='fa'
+    ? "500 10px 'Vazirmatn', sans-serif"
+    : "500 9px 'IBM Plex Mono', monospace";
+  ctx.fillText(d, size/2, size/2 + 14);
+
+  svg.style.visibility = 'hidden';
+  numDiv.style.visibility = 'hidden';
+  wrap.appendChild(flat);
+  wrap._exportFlatCanvas = flat;
+}
+
+function restoreScoreRingAfterExport(){
+  const wrap = document.querySelector('.score-ring-wrap');
+  if(!wrap) return;
+  const svg = wrap.querySelector('svg');
+  const numDiv = wrap.querySelector('.score-num');
+  if(wrap._exportFlatCanvas){
+    wrap._exportFlatCanvas.remove();
+    delete wrap._exportFlatCanvas;
+  }
+  if(svg) svg.style.visibility = '';
+  if(numDiv) numDiv.style.visibility = '';
+}
+
+/* ------------------------------------------------------------
+   Shared capture: renders the report to a canvas once, used by
+   all three export paths. scale 1.5 + JPEG keeps output sharp
+   on screen/print while cutting file size dramatically versus
+   the previous scale-2 PNG capture.
+   ------------------------------------------------------------ */
+/* ------------- Collapsible report sections (accordion) -------------
+   Every section starts open. Clicking a section title still lets the
+   trainer collapse ones they don't need for a given client. Exports
+   always temporarily force everything open so the PDF/Image/Share
+   output shows the full report regardless of what's currently
+   collapsed on screen. */
+function initCollapsibleSections(){
+  document.querySelectorAll('.section-title.collapsible').forEach(title=>{
+    if(title.dataset.wired) return;
+    title.dataset.wired = '1';
+    title.addEventListener('click', ()=>{
+      const section = title.closest('.report-section');
+      if(section) section.classList.toggle('open');
+    });
+  });
+}
+function forceOpenAllSections(){
+  const closed = document.querySelectorAll('.report-section:not(.open)');
+  closed.forEach(s => s.classList.add('open', '_forceOpenTemp'));
+  return closed;
+}
+function restoreForcedSections(closedEls){
+  closedEls.forEach(s => s.classList.remove('open', '_forceOpenTemp'));
+}
+
+async function captureReportCanvas(){
+  if(document.fonts && document.fonts.ready){ await document.fonts.ready; }
+  await flattenScoreRingForExport();
+  const closedSections = forceOpenAllSections();
+  try{
+    const report = document.getElementById('report');
+    // Size the virtual rendering window from the #report element itself
+    // (not the whole document/sidebar/overlay chrome around it) — using
+    // document.documentElement.scrollWidth here was letting html2canvas
+    // lay the report out at the wrong width, cropping the right edge.
+    const fullWidth = Math.max(report.scrollWidth, report.offsetWidth);
+    const fullHeight = Math.max(report.scrollHeight, report.offsetHeight);
+    return await html2canvas(report, {
+      scale:1.5,
+      backgroundColor:'#ffffff',
+      useCORS:true,
+      width: fullWidth,
+      height: fullHeight,
+      windowWidth: fullWidth,
+      windowHeight: fullHeight
+    });
+  } finally {
+    restoreForcedSections(closedSections);
+    restoreScoreRingAfterExport();
+  }
+}
+function clientFileBase(){
+  return (document.getElementById('clientName').value.trim() || 'client').replace(/[^a-z0-9]+/gi,'-').toLowerCase() + '-body-composition-report';
+}
+function canvasToJpegBlob(canvas, quality){
+  return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+}
+
+/* ============================================================
+   IMPORT FROM IMAGE(S) — every JPG this tool exports (via Image
+   or Share) carries its full report record appended after the
+   JPEG's end marker. Viewers and photo apps ignore those trailing
+   bytes, so the picture looks and works completely normal — but
+   this tool can read them straight back out, no OCR needed. That
+   also means it only works for images this tool itself produced;
+   a photo of a printed page, or a copy re-compressed by another
+   app, won't have the payload anymore.
+   ============================================================ */
+const REPORT_MARK_START = '%%BIACOMPREPORT-v1-START%%';
+const REPORT_MARK_END   = '%%BIACOMPREPORT-v1-END%%';
+
+function buildReportRecord(inputs){
+  const computed = computeAll(inputs);
+  return Object.assign({}, inputs, {
+    total: computed.total,
+    savedAt: inputs.savedAt || new Date().toISOString()
+  });
+}
+
+/* Appends the record as base64 JSON after the JPEG data. Safe for
+   unicode (client names/notes in Persian, etc.) via the
+   encodeURIComponent/escape round-trip before btoa. */
+async function embedReportData(blob, inputs){
+  try{
+    const record = buildReportRecord(inputs);
+    const json = JSON.stringify(record);
+    const b64 = btoa(unescape(encodeURIComponent(json)));
+    const payload = '\n' + REPORT_MARK_START + b64 + REPORT_MARK_END;
+    const payloadBytes = new TextEncoder().encode(payload);
+    const originalBytes = new Uint8Array(await blob.arrayBuffer());
+    const combined = new Uint8Array(originalBytes.length + payloadBytes.length);
+    combined.set(originalBytes, 0);
+    combined.set(payloadBytes, originalBytes.length);
+    return new Blob([combined], {type:'image/jpeg'});
+  } catch(e){
+    console.error('Could not embed report data in image:', e);
+    return blob; // still export the picture even if embedding failed
+  }
+}
+
+/* When this page is loaded inside the Android wrapper app, MainActivity
+   injects a JS interface called `AndroidBridge` with saveFile()/shareFile()
+   methods (blob: download links and the Web Share API don't work inside a
+   plain WebView, so native code has to handle the actual file write/share). */
+function blobToBase64(blob){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onloadend = ()=> resolve(reader.result.split(',')[1]); // strip "data:...;base64,"
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+async function downloadBlob(blob, filename){
+  if(window.AndroidBridge && window.AndroidBridge.saveFile){
+    const base64 = await blobToBase64(blob);
+    window.AndroidBridge.saveFile(base64, filename, blob.type || 'application/octet-stream');
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+}
+async function withButtonBusy(btn, busyKey, fn){
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = t(busyKey);
+  try{ await fn(); }
+  catch(e){ alert(t('exportFailed')+e.message); }
+  finally{ btn.disabled = false; btn.textContent = original; }
+}
+
+/* -------- PDF: compact single page (JPEG + PDF stream compression) -------- */
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const btn = document.getElementById('exportBtn');
+  withButtonBusy(btn, 'exportingBtn', async ()=>{
+    const canvas = await captureReportCanvas();
+    const imgData = canvas.toDataURL('image/jpeg', 0.9);
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({orientation:'portrait', unit:'pt', format:'letter', compress:true});
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 22;
+    const availW = pageW - margin*2;
+    const availH = pageH - margin*2;
+    const scale = Math.min(availW/canvas.width, availH/canvas.height);
+    const w = canvas.width*scale, h = canvas.height*scale;
+    const x = (pageW-w)/2, y = (pageH-h)/2;
+    pdf.addImage(imgData, 'JPEG', x, y, w, h, undefined, 'FAST');
+    const pdfBlob = pdf.output('blob');
+    await downloadBlob(pdfBlob, `${clientFileBase()}.pdf`);
+  });
+});
+
+/* -------- Image: single JPG, opens instantly in any gallery/chat app -------- */
+document.getElementById('imageBtn').addEventListener('click', ()=>{
+  const btn = document.getElementById('imageBtn');
+  withButtonBusy(btn, 'imagingBtn', async ()=>{
+    const canvas = await captureReportCanvas();
+    let blob = await canvasToJpegBlob(canvas, 0.92);
+    if(lastInputs) blob = await embedReportData(blob, lastInputs);
+    downloadBlob(blob, `${clientFileBase()}.jpg`);
+  });
+});
+
+/* -------- Interactive HTML: a standalone, self-contained snapshot the
+   client can open in any browser. Every report section starts open
+   (readable at a glance) but stays collapsible, so they can dig into
+   Reference Details / Nutrition / Diet Plans on their own. Canvas
+   charts (scatter plot, macro donuts) are baked into static images
+   first, since cloneNode() copies DOM/SVG but not canvas pixels. -------- */
+async function exportInteractiveHtml(){
+  if(document.fonts && document.fonts.ready){ await document.fonts.ready; }
+
+  const reportEl = document.getElementById('report');
+  const clone = reportEl.cloneNode(true);
+  clone.removeAttribute('id');
+  clone.style.display = 'block';
+
+  clone.querySelectorAll('.report-section').forEach(sec => sec.classList.add('open'));
+
+  reportEl.querySelectorAll('canvas').forEach(liveCanvas=>{
+    if(!liveCanvas.id) return;
+    const cloneCanvas = clone.querySelector('#' + CSS.escape(liveCanvas.id));
+    if(!cloneCanvas) return;
+    let dataUrl;
+    try{ dataUrl = liveCanvas.toDataURL('image/png'); } catch(e){ return; }
+    const img = document.createElement('img');
+    img.src = dataUrl;
+    img.id = liveCanvas.id;
+    img.className = liveCanvas.className;
+    const cs = window.getComputedStyle(liveCanvas);
+    img.style.width = cs.width;
+    img.style.height = cs.height;
+    img.style.display = cs.display;
+    cloneCanvas.replaceWith(img);
+  });
+
+  const styleHtml = document.querySelector('style').outerHTML;
+  const fontLinks = Array.from(document.querySelectorAll('link[href*="fonts.google"]'))
+    .map(l => l.outerHTML).join('\n');
+  const dir = currentLang === 'fa' ? 'rtl' : 'ltr';
+  const titleName = (lastInputs && lastInputs.clientName) ? escapeHtml(lastInputs.clientName) : t('defaultClientName');
+
+  // Embed just enough of the meal-picking system for "Try different
+  // meals" to actually work standalone — cloneNode() copies markup but
+  // never event listeners, so without this the shuffle buttons in the
+  // exported file are inert.
+  const embeddedMealData = {
+    library: MEAL_LIBRARY, slots: MEAL_SLOTS,
+    vegExclude: VEG_EXCLUDE, veganExclude: VEGAN_EXCLUDE, pescExclude: PESC_EXCLUDE,
+    slotFraction: MEAL_SLOT_FRACTION, scaleInfo: MEAL_SCALE_INFO,
+    mealFoods: I18N[currentLang].mealFoods, slotLabels: I18N[currentLang].mealSlotLabels,
+    prefs: lastDietPrefs || {dietPattern:'omnivore', cuisine:'any', avoid:[]},
+    plans: lastDietPlans || []
+  };
+
+  const tourSteps = [
+    {sel:'.score-ring-wrap', titleKey:'tourStepScoreTitle', textKey:'tourStepScoreText'},
+    {sectionTitle:'sectionRangePosition', titleKey:'tourStepRangeTitle', textKey:'tourStepRangeText'},
+    {sel:'#referenceDetailsSection', titleKey:'tourStepDetailsTitle', textKey:'tourStepDetailsText'},
+    {sectionTitle:'sectionBuildClassification', titleKey:'tourStepBuildTitle', textKey:'tourStepBuildText'},
+    {sectionTitle:'sectionNutrition', titleKey:'tourStepNutritionTitle', textKey:'tourStepNutritionText'},
+    {sel:'#dietPlansSection', titleKey:'tourStepDietTitle', textKey:'tourStepDietText'}
+  ].map(s => ({ sel:s.sel, sectionTitle:s.sectionTitle, title:t(s.titleKey), text:t(s.textKey) }));
+
+  const tourCopy = {
+    start:t('tourStartBtn'), stepOf:t('tourStepOf'), next:t('tourNextBtn'),
+    back:t('tourBackBtn'), skip:t('tourSkipBtn'), done:t('tourDoneBtn')
+  };
+
+  const doc = `<!DOCTYPE html>
+<html lang="${currentLang}" dir="${dir}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${titleName} \u2014 ${t('appTitle')}</title>
+${fontLinks}
+${styleHtml}
+<style>
+  body{background:var(--paper); margin:0; padding:24px 16px 90px;}
+  .report-shell{max-width:800px; margin:0 auto; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:30px 34px 26px;}
+  @media (max-width:640px){ .report-shell{padding:20px 16px;} }
+
+  .tour-start-btn{
+    position:fixed; ${dir==='rtl' ? 'left' : 'right'}:18px; bottom:18px; z-index:900;
+    font-family:var(--mono); font-size:12.5px; letter-spacing:.03em;
+    background:var(--teal); color:#fff; border:none; border-radius:24px;
+    padding:12px 18px; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,0.22);
+  }
+  .tour-start-btn:hover{background:var(--teal-deep);}
+  .tour-highlight{
+    position:relative; z-index:901;
+    outline:3px solid var(--teal); outline-offset:4px; border-radius:8px;
+    box-shadow:0 0 0 4000px rgba(15,36,56,0.55), 0 0 24px rgba(18,122,110,0.5);
+    background:var(--panel);
+  }
+  .tour-panel{
+    position:fixed; left:0; right:0; bottom:0; z-index:902;
+    background:var(--ink); color:#fff; padding:16px 20px;
+    box-shadow:0 -6px 24px rgba(0,0,0,0.3);
+    display:none;
+  }
+  .tour-panel.open{display:block;}
+  .tour-panel-inner{max-width:640px; margin:0 auto;}
+  .tour-step-label{font-family:var(--mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#8FB8B0; margin-bottom:6px;}
+  .tour-title{font-family:var(--display); font-weight:700; font-size:15px; margin-bottom:6px;}
+  .tour-text{font-size:12.5px; line-height:1.6; color:#D7E0E4; margin-bottom:14px;}
+  .tour-controls{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
+  .tour-nav-btns{display:flex; gap:8px;}
+  .tour-btn{
+    font-family:var(--mono); font-size:12px; padding:8px 14px; border-radius:5px; cursor:pointer;
+    border:1.5px solid rgba(255,255,255,0.35); background:transparent; color:#fff;
+  }
+  .tour-btn.primary{background:var(--teal); border-color:var(--teal);}
+  .tour-btn.primary:hover{background:var(--teal-deep);}
+  .tour-btn:hover{background:rgba(255,255,255,0.12);}
+  html[lang="fa"] .tour-title, html[lang="fa"] .tour-text, html[lang="fa"] .tour-step-label{letter-spacing:normal !important;}
+</style>
+</head>
+<body>
+<div class="report-shell">${clone.outerHTML}</div>
+
+<button type="button" class="tour-start-btn" id="tourStartBtn">${tourCopy.start}</button>
+<div class="tour-panel" id="tourPanel">
+  <div class="tour-panel-inner">
+    <div class="tour-step-label" id="tourStepLabel"></div>
+    <div class="tour-title" id="tourTitle"></div>
+    <div class="tour-text" id="tourText"></div>
+    <div class="tour-controls">
+      <button type="button" class="tour-btn" id="tourSkipBtn">${tourCopy.skip}</button>
+      <div class="tour-nav-btns">
+        <button type="button" class="tour-btn" id="tourBackBtn">${tourCopy.back}</button>
+        <button type="button" class="tour-btn primary" id="tourNextBtn">${tourCopy.next}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.section-title.collapsible').forEach(function(title){
+  title.addEventListener('click', function(){
+    var section = title.closest('.report-section');
+    if(section) section.classList.toggle('open');
+  });
+});
+document.querySelectorAll('.lightbox-overlay').forEach(function(el){ el.remove(); });
+
+/* ---- "Try different meals" — reimplemented standalone since cloneNode()
+   never carries over the live app's event listeners ---- */
+(function(){
+  var DATA = ${JSON.stringify(embeddedMealData)};
+
+  function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
+  function scaledMealGrams(mealId, plan){
+    var info = DATA.scaleInfo[mealId];
+    if(!info) return null;
+    var dailyTarget = info.type==='p' ? plan.proteinG : plan.carbG;
+    var fraction = DATA.slotFraction[info.slot];
+    var raw = (dailyTarget*fraction) / (info.density/100);
+    return clamp(Math.round(raw/5)*5, 40, 320);
+  }
+  function mealFoodText(mealId, plan){
+    var txt = DATA.mealFoods[mealId] || '';
+    var grams = scaledMealGrams(mealId, plan);
+    if(grams!==null) txt = txt.replace('{p}', grams).replace('{c}', grams);
+    return txt;
+  }
+  function mealAllowed(meal, prefs){
+    var c = meal.contains || [];
+    var exclude = prefs.dietPattern==='vegan' ? DATA.veganExclude :
+      prefs.dietPattern==='vegetarian' ? DATA.vegExclude :
+      prefs.dietPattern==='pescatarian' ? DATA.pescExclude : [];
+    if(c.some(function(tag){ return exclude.indexOf(tag)>-1; })) return false;
+    if((prefs.avoid||[]).some(function(tag){ return c.indexOf(tag)>-1; })) return false;
+    if(prefs.cuisine && prefs.cuisine!=='any' && meal.cuisine && meal.cuisine!==prefs.cuisine) return false;
+    return true;
+  }
+  function pickMealsForPlan(planKey, prefs){
+    var planLib = DATA.library[planKey];
+    if(!planLib) return [];
+    return DATA.slots.map(function(slot){
+      var options = planLib[slot] || [];
+      var pool = options.filter(function(m){ return mealAllowed(m, {dietPattern:prefs.dietPattern, avoid:prefs.avoid}); });
+      if(!pool.length) pool = options.filter(function(m){ return mealAllowed(m, {dietPattern:prefs.dietPattern, avoid:[]}); });
+      if(!pool.length) pool = options;
+      var pick = pool[Math.floor(Math.random()*pool.length)];
+      return pick ? {id:pick.id, icon:pick.icon, slot:slot} : null;
+    }).filter(Boolean);
+  }
+
+  document.querySelectorAll('.dc-shuffle').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var key = btn.dataset.planKey;
+      var plan = DATA.plans.filter(function(x){ return x.key===key; })[0];
+      if(!plan) return;
+      var meals = pickMealsForPlan(key, DATA.prefs);
+      var card = btn.closest('.diet-card');
+      card.querySelector('.dc-meals').innerHTML = meals.map(function(m){
+        return '<div class="dc-meal"><span class="mi">'+m.icon+'</span><span><span class="mt">'+DATA.slotLabels[m.slot]+'</span> <span class="mf">'+mealFoodText(m.id, plan)+'</span></span></div>';
+      }).join('');
+    });
+  });
+})();
+
+/* ---- guided tour ---- */
+(function(){
+  var steps = ${JSON.stringify(tourSteps)};
+  var copy = ${JSON.stringify(tourCopy)};
+  var idx = -1;
+  var activeEl = null;
+
+  function resolveStep(step){
+    if(step.sel) return document.querySelector(step.sel);
+    if(step.sectionTitle){
+      var titleEl = document.querySelector('[data-i18n="'+step.sectionTitle+'"]');
+      return titleEl ? titleEl.closest('.report-section') : null;
+    }
+    return null;
+  }
+  function clearHighlight(){
+    if(activeEl){ activeEl.classList.remove('tour-highlight'); activeEl = null; }
+  }
+  function showStep(i){
+    clearHighlight();
+    if(i < 0 || i >= steps.length){ endTour(); return; }
+    idx = i;
+    var step = steps[idx];
+    var el = resolveStep(step);
+    if(!el){ showStep(idx + 1); return; }
+    if(el.classList.contains('report-section')) el.classList.add('open');
+    el.classList.add('tour-highlight');
+    activeEl = el;
+    el.scrollIntoView({behavior:'smooth', block:'center'});
+
+    document.getElementById('tourStepLabel').textContent = copy.stepOf.replace('{i}', idx+1).replace('{n}', steps.length);
+    document.getElementById('tourTitle').textContent = step.title;
+    document.getElementById('tourText').textContent = step.text;
+    document.getElementById('tourBackBtn').style.visibility = idx===0 ? 'hidden' : 'visible';
+    document.getElementById('tourNextBtn').textContent = (idx===steps.length-1) ? copy.done : copy.next;
+    document.getElementById('tourPanel').classList.add('open');
+  }
+  function endTour(){
+    clearHighlight();
+    document.getElementById('tourPanel').classList.remove('open');
+    idx = -1;
+  }
+  document.getElementById('tourStartBtn').addEventListener('click', function(){ showStep(0); });
+  document.getElementById('tourNextBtn').addEventListener('click', function(){ showStep(idx+1); });
+  document.getElementById('tourBackBtn').addEventListener('click', function(){ showStep(idx-1); });
+  document.getElementById('tourSkipBtn').addEventListener('click', endTour);
+})();
+<\/script>
+</body>
+</html>`;
+
+  const blob = new Blob([doc], {type:'text/html'});
+  const filename = `${clientFileBase()}.html`;
+
+  if(window.AndroidBridge && window.AndroidBridge.saveFile){
+    const base64 = await blobToBase64(blob);
+    window.AndroidBridge.saveFile(base64, filename, 'text/html');
+    return;
+  }
+
+  const file = new File([blob], filename, {type:'text/html'});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{
+      await navigator.share({files:[file], title:t('shareTitle')});
+      return;
+    } catch(shareErr){
+      if(shareErr && shareErr.name === 'AbortError') return; // user cancelled — not a failure
+      // some browsers advertise file sharing but reject text/html specifically;
+      // fall through to the download/new-tab fallback below instead of erroring out
+    }
+  }
+
+  // Universal fallback: some mobile browsers and in-app webviews silently
+  // ignore the download attribute for HTML content (they navigate/preview
+  // instead of saving), so open a real tab too — that always works, and
+  // the user can Save Page / Share from there even if the direct
+  // download didn't visibly do anything.
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.open(url, '_blank');
+  setTimeout(()=> URL.revokeObjectURL(url), 60000);
+}
+
+document.getElementById('htmlExportBtn').addEventListener('click', ()=>{
+  const btn = document.getElementById('htmlExportBtn');
+  withButtonBusy(btn, 'htmlExportingBtn', exportInteractiveHtml);
+});
+
+/* -------- Share: native share sheet on mobile (WhatsApp, Telegram, Mail, AirDrop, etc.) -------- */
+document.getElementById('shareBtn').addEventListener('click', ()=>{
+  const btn = document.getElementById('shareBtn');
+  withButtonBusy(btn, 'sharingBtn', async ()=>{
+    const canvas = await captureReportCanvas();
+    let blob = await canvasToJpegBlob(canvas, 0.92);
+    if(lastInputs) blob = await embedReportData(blob, lastInputs);
+    const filename = `${clientFileBase()}.jpg`;
+
+    if(window.AndroidBridge && window.AndroidBridge.shareFile){
+      const base64 = await blobToBase64(blob);
+      window.AndroidBridge.shareFile(base64, filename, 'image/jpeg');
+      return;
+    }
+    const file = new File([blob], filename, {type:'image/jpeg'});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title:t('shareTitle')});
+    } else {
+      downloadBlob(blob, filename);
+      alert(t('shareUnsupported'));
+    }
+  });
+});
+
+applyStaticTranslations();
+</script>
+</body>
+</html>
